@@ -1,0 +1,161 @@
+local RS = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+local declineRemote = RS.Trade.DeclineTrade
+
+local active = false
+
+local sg = Instance.new("ScreenGui")
+sg.Name = "AutoDecline"
+sg.ResetOnSpawn = false
+sg.DisplayOrder = 1000
+pcall(function() sg.Parent = game:GetService("CoreGui") end)
+if not sg.Parent then sg.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui") end
+
+-- ══ زر التفعيل ══
+local btn = Instance.new("TextButton", sg)
+btn.Size = UDim2.new(0, 160, 0, 40)
+btn.Position = UDim2.new(0, 20, 0, 20)
+btn.BackgroundColor3 = Color3.fromRGB(14, 14, 28)
+btn.Text = "🛡 رفض تلقائي: OFF"
+btn.TextColor3 = Color3.fromRGB(220, 45, 45)
+btn.TextSize = 13
+btn.Font = Enum.Font.GothamBold
+btn.BorderSizePixel = 0
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+local st = Instance.new("UIStroke", btn)
+st.Color = Color3.fromRGB(220, 45, 45)
+st.Thickness = 1.5
+
+-- ══ دالة الإشعار ══
+local notifCount = 0
+local function showNotif()
+    notifCount = notifCount + 1
+
+    local notif = Instance.new("Frame", sg)
+    notif.Size = UDim2.new(0, 240, 0, 50)
+    notif.Position = UDim2.new(0, 20, 0, 70 + (notifCount % 5) * 55)
+    notif.BackgroundColor3 = Color3.fromRGB(10, 30, 10)
+    notif.BorderSizePixel = 0
+    notif.ZIndex = 20
+    Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 8)
+    local ns = Instance.new("UIStroke", notif)
+    ns.Color = Color3.fromRGB(35, 200, 100)
+    ns.Thickness = 1.5
+
+    -- أيقونة درع
+    local ico = Instance.new("TextLabel", notif)
+    ico.Size = UDim2.new(0, 36, 1, 0)
+    ico.Position = UDim2.new(0, 6, 0, 0)
+    ico.BackgroundTransparency = 1
+    ico.Text = "🛡"
+    ico.TextSize = 22
+    ico.Font = Enum.Font.GothamBold
+    ico.ZIndex = 21
+
+    local msg = Instance.new("TextLabel", notif)
+    msg.Size = UDim2.new(1, -48, 0, 20)
+    msg.Position = UDim2.new(0, 44, 0, 6)
+    msg.BackgroundTransparency = 1
+    msg.Text = "تمت حمايتك من AMTU"
+    msg.TextColor3 = Color3.fromRGB(35, 200, 100)
+    msg.TextSize = 12
+    msg.Font = Enum.Font.GothamBold
+    msg.TextXAlignment = Enum.TextXAlignment.Left
+    msg.ZIndex = 21
+
+    local sub = Instance.new("TextLabel", notif)
+    sub.Size = UDim2.new(1, -48, 0, 16)
+    sub.Position = UDim2.new(0, 44, 0, 28)
+    sub.BackgroundTransparency = 1
+    sub.Text = "✅ تم رفض طلب التريد"
+    sub.TextColor3 = Color3.fromRGB(120, 120, 160)
+    sub.TextSize = 10
+    sub.Font = Enum.Font.Gotham
+    sub.TextXAlignment = Enum.TextXAlignment.Left
+    sub.ZIndex = 21
+
+    -- اختفاء تدريجي بعد 3 ثواني
+    task.spawn(function()
+        task.wait(3)
+        for i = 1, 10 do
+            notif.BackgroundTransparency = i / 10
+            msg.TextTransparency = i / 10
+            sub.TextTransparency = i / 10
+            ico.TextTransparency = i / 10
+            ns.Transparency = i / 10
+            task.wait(0.05)
+        end
+        notif:Destroy()
+        notifCount = math.max(0, notifCount - 1)
+    end)
+end
+
+-- ══ زر التفعيل ══
+btn.MouseButton1Click:Connect(function()
+    active = not active
+    if active then
+        btn.Text = "🛡 رفض تلقائي: ON"
+        btn.TextColor3 = Color3.fromRGB(35, 200, 100)
+        st.Color = Color3.fromRGB(35, 200, 100)
+    else
+        btn.Text = "🛡 رفض تلقائي: OFF"
+        btn.TextColor3 = Color3.fromRGB(220, 45, 45)
+        st.Color = Color3.fromRGB(220, 45, 45)
+    end
+end)
+
+-- ══ مراقبة التريد ══
+local function watchForTrade()
+    local tradeFolder = RS:FindFirstChild("Trade")
+    if not tradeFolder then return end
+    for _, remote in ipairs(tradeFolder:GetDescendants()) do
+        if remote.ClassName == "RemoteEvent" then
+            local n = remote.Name:lower()
+            if n:find("request") or n:find("invite") or n:find("send") or n:find("offer") then
+                remote.OnClientEvent:Connect(function()
+                    if not active then return end
+                    task.wait(0.1)
+                    pcall(function() declineRemote:FireServer() end)
+                    showNotif()
+                end)
+            end
+        end
+    end
+end
+
+local Players = game:GetService("Players")
+local plr = Players.LocalPlayer
+local playerGui = plr:WaitForChild("PlayerGui")
+
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if not active then continue end
+        for _, gui in ipairs(playerGui:GetChildren()) do
+            if gui.Name:lower():find("trade") then
+                pcall(function() declineRemote:FireServer() end)
+                showNotif()
+                task.wait(2)
+            end
+        end
+    end
+end)
+
+watchForTrade()
+
+-- ══ Drag ══
+local drag, ds, dp
+btn.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        drag=true; ds=i.Position; dp=btn.Position
+    end
+end)
+UIS.InputChanged:Connect(function(i)
+    if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local d = i.Position - ds
+        btn.Position = UDim2.new(dp.X.Scale, dp.X.Offset+d.X, dp.Y.Scale, dp.Y.Offset+d.Y)
+    end
+end)
+UIS.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=false end
+end)
