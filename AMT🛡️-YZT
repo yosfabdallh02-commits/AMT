@@ -1,6 +1,7 @@
 local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local declineRemote = RS.Trade.DeclineTrade
+local declineRequest = RS.Trade.DeclineRequest -- الريمـوت الجديد
 
 local active = false
 
@@ -42,7 +43,6 @@ local function showNotif()
     ns.Color = Color3.fromRGB(35, 200, 100)
     ns.Thickness = 1.5
 
-    -- أيقونة درع
     local ico = Instance.new("TextLabel", notif)
     ico.Size = UDim2.new(0, 36, 1, 0)
     ico.Position = UDim2.new(0, 6, 0, 0)
@@ -74,7 +74,6 @@ local function showNotif()
     sub.TextXAlignment = Enum.TextXAlignment.Left
     sub.ZIndex = 21
 
-    -- اختفاء تدريجي بعد 3 ثواني
     task.spawn(function()
         task.wait(3)
         for i = 1, 10 do
@@ -104,6 +103,15 @@ btn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- ══ دالة الرفض (ترسل الريمـوتين) ══
+local function declineTrade()
+    pcall(function()
+        declineRemote:FireServer()
+        declineRequest:FireServer() -- الريمـوت الجديد
+    end)
+    showNotif()
+end
+
 -- ══ مراقبة التريد ══
 local function watchForTrade()
     local tradeFolder = RS:FindFirstChild("Trade")
@@ -115,8 +123,7 @@ local function watchForTrade()
                 remote.OnClientEvent:Connect(function()
                     if not active then return end
                     task.wait(0.1)
-                    pcall(function() declineRemote:FireServer() end)
-                    showNotif()
+                    declineTrade()
                 end)
             end
         end
@@ -133,8 +140,7 @@ task.spawn(function()
         if not active then continue end
         for _, gui in ipairs(playerGui:GetChildren()) do
             if gui.Name:lower():find("trade") then
-                pcall(function() declineRemote:FireServer() end)
-                showNotif()
+                declineTrade()
                 task.wait(2)
             end
         end
@@ -160,7 +166,7 @@ UIS.InputEnded:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=false end
 end)
 
--- ══ رسالة المطور (مدمجة) ══
+-- ══ رسالة المطور ══
 local player = Players.LocalPlayer
 
 local gui = Instance.new("ScreenGui")
