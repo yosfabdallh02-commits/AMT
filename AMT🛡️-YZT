@@ -159,18 +159,18 @@ end)
 UIS.InputEnded:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=false end
 end)
-______
-local Players = game:GetService("Players")
+
+-- ══ رسالة المطور (مدمجة) ══
 local player = Players.LocalPlayer
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "AMTMessage"
 gui.ResetOnSpawn = false
 pcall(function()
-	gui.Parent = game:GetService("CoreGui")
+    gui.Parent = game:GetService("CoreGui")
 end)
 if not gui.Parent then
-	gui.Parent = player:WaitForChild("PlayerGui")
+    gui.Parent = player:WaitForChild("PlayerGui")
 end
 
 local frame = Instance.new("Frame", gui)
@@ -226,5 +226,5 @@ close.BorderSizePixel = 0
 Instance.new("UICorner", close).CornerRadius = UDim.new(0,8)
 
 close.MouseButton1Click:Connect(function()
-	gui:Destroy()
+    gui:Destroy()
 end)
