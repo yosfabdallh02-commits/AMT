@@ -159,3 +159,72 @@ end)
 UIS.InputEnded:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=false end
 end)
+______
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "AMTMessage"
+gui.ResetOnSpawn = false
+pcall(function()
+	gui.Parent = game:GetService("CoreGui")
+end)
+if not gui.Parent then
+	gui.Parent = player:WaitForChild("PlayerGui")
+end
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 500, 0, 280)
+frame.Position = UDim2.new(0.5, -250, 0.5, -140)
+frame.BackgroundColor3 = Color3.fromRGB(18,18,25)
+frame.BorderSizePixel = 0
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
+
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(0,170,255)
+stroke.Thickness = 2
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1,0,0,45)
+title.BackgroundTransparency = 1
+title.Text = "📢 رسالة من المطور"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 22
+title.TextColor3 = Color3.fromRGB(255,255,255)
+
+local text = Instance.new("TextLabel", frame)
+text.Position = UDim2.new(0,15,0,50)
+text.Size = UDim2.new(1,-30,1,-100)
+text.BackgroundTransparency = 1
+text.TextWrapped = true
+text.TextYAlignment = Enum.TextYAlignment.Top
+text.Font = Enum.Font.Gotham
+text.TextSize = 17
+text.TextColor3 = Color3.fromRGB(230,230,230)
+text.Text = [[
+
+⚠️ تنبيه مهم
+
+سكربت "Honey Hub" هو سكربت غش وسرقة، لذلك ننصح بعدم استخدامه.
+
+إذا كنت ستستخدم أي سكربت، فاستخدم سكربت الحماية مع AMT للمساعدة في حمايتك.
+
+شكرًا لكم على ثقتكم وتفهمكم. ❤️
+
+— فريق AMT
+]]
+
+local close = Instance.new("TextButton", frame)
+close.Size = UDim2.new(0,120,0,36)
+close.Position = UDim2.new(0.5,-60,1,-45)
+close.Text = "إغلاق"
+close.Font = Enum.Font.GothamBold
+close.TextSize = 16
+close.TextColor3 = Color3.new(1,1,1)
+close.BackgroundColor3 = Color3.fromRGB(0,170,255)
+close.BorderSizePixel = 0
+Instance.new("UICorner", close).CornerRadius = UDim.new(0,8)
+
+close.MouseButton1Click:Connect(function()
+	gui:Destroy()
+end)
