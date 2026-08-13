@@ -1,0 +1,105 @@
+-- ==============================================
+-- 🚀 سكربت الانتقال - مع مربع كتابة المعرف
+-- ==============================================
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local plr = Players.LocalPlayer
+local PLACE_ID = game.PlaceId
+
+-- حذف القديم
+pcall(function() if CoreGui:FindFirstChild("ServerJoinerUI") then CoreGui.ServerJoinerUI:Destroy() end end)
+
+-- 🎨 الواجهة
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "ServerJoinerUI"
+Gui.Parent = CoreGui
+Gui.ResetOnSpawn = false
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 340, 0, 200)
+Main.Position = UDim2.new(0.02, 0, 0.78, 0)
+Main.BackgroundColor3 = Color3.fromRGB(22, 24, 35)
+Main.BorderSizePixel = 2
+Main.BorderColor3 = Color3.fromRGB(70, 160, 255)
+Main.Active = true
+Main.Draggable = true
+Main.Parent = Gui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 12)
+
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(35, 40, 60)
+Title.Text = "🔗 انضم لسيرفر بمعرفه"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold
+Title.TextScaled = true
+
+local InputLabel = Instance.new("TextLabel", Main)
+InputLabel.Size = UDim2.new(1, -20, 0, 25)
+InputLabel.Position = UDim2.new(0, 10, 0, 50)
+InputLabel.BackgroundTransparency = 1
+InputLabel.Text = "✏️ اكتب معرف السيرفر هنا:"
+InputLabel.TextColor3 = Color3.fromRGB(200, 220, 255)
+InputLabel.Font = Enum.Font.Gotham
+
+-- 📝 مربع الكتابة
+local InputBox = Instance.new("TextBox", Main)
+InputBox.Size = UDim2.new(1, -20, 0, 45)
+InputBox.Position = UDim2.new(0, 10, 0, 75)
+InputBox.BackgroundColor3 = Color3.fromRGB(25, 30, 50)
+InputBox.Text = "9fcf3cdb-47ba-4f81-bb23-49ce76cc8153"
+InputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+InputBox.Font = Enum.Font.Gotham
+InputBox.TextSize = 11
+InputBox.PlaceholderText = "ألصق معرف السيرفر هنا..."
+InputBox.ClearTextOnFocus = false
+Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 8)
+
+local Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, -20, 0, 25)
+Status.Position = UDim2.new(0, 10, 0, 125)
+Status.BackgroundTransparency = 1
+Status.Text = "✅ المعرف جاهز - اضغط انضم"
+Status.TextColor3 = Color3.fromRGB(80, 255, 120)
+Status.Font = Enum.Font.Gotham
+
+local GoBtn = Instance.new("TextButton", Main)
+GoBtn.Size = UDim2.new(1, -20, 0, 45)
+GoBtn.Position = UDim2.new(0, 10, 0, 155)
+GoBtn.BackgroundColor3 = Color3.fromRGB(60, 130, 255)
+GoBtn.Text = "🚀 انضم للسيرفر الآن"
+GoBtn.TextColor3 = Color3.new(1,1,1)
+GoBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", GoBtn).CornerRadius = UDim.new(0, 8)
+
+-- 🚀 دالة الانتقال
+local function JoinServer()
+    local JOB_ID = InputBox.Text:gsub("%s+", "") -- حذف المسافات
+    if JOB_ID == "" then
+        Status.Text = "⚠️ اكتب المعرف أولاً!"
+        Status.TextColor3 = Color3.fromRGB(255, 180, 50)
+        return
+    end
+
+    Status.Text = "⏳ جاري المحاولة..."
+    Status.TextColor3 = Color3.fromRGB(255, 220, 80)
+    GoBtn.Active = false
+
+    local ok, err = pcall(function()
+        TeleportService:TeleportToPlaceInstance(PLACE_ID, JOB_ID, plr)
+    end)
+
+    if not ok then
+        Status.Text = "❌ فشل: "..tostring(err):sub(1, 30)
+        Status.TextColor3 = Color3.fromRGB(255, 80, 80)
+        GoBtn.Active = true
+    end
+end
+
+GoBtn.MouseButton1Click:Connect(JoinServer)
+InputBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then JoinServer() end
+end)
+
+print("✅ جاهز! اكتب المعرف واضغط انضم")
