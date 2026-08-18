@@ -1,146 +1,130 @@
---[[
-    سكربت دلتا - AI Chat مع قائمة UI
-    API: Gemini Flash
-]]
-
+-- LocalScript for Delta Executor
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local API_KEY = "AQ.Ab8RN6I_ZrWxF2NQNFmN9GGO8RIPppC_3Q9mqY-wS2f2J3w4cA"
-local API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+-- رابط الـ API
+local API_URL = "https://robloxtracker.vercel.app/api/ingest"
 
--- وظيفة تسأل AI
-local function askAI(question)
-    local response = syn.request({
-        Url = API_URL .. "?key=" .. API_KEY,
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/json"},
-        Body = HttpService:JSONEncode({
-            contents = {{
-                parts = {{text = question}}
-            }}
-        })
-    })
-    
-    local decoded = HttpService:JSONDecode(response.Body)
-    
-    if decoded.candidates and decoded.candidates[1] then
-        return decoded.candidates[1].content.parts[1].text
-    else
-        return "خطأ: " .. (decoded.error and decoded.error.message or "ما فيه رد")
-    end
-end
-
--- إنشاء القائمة
+-- إنشاء الواجهة
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Parent = player:WaitForChild("PlayerGui")
+ScreenGui.Name = "RobloxTracker"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
 
-local Frame = Instance.new("Frame")
-Frame.Size = UDim2.new(0, 400, 0, 350)
-Frame.Position = UDim2.new(0.5, -200, 0.5, -175)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.BorderSizePixel = 0
-Frame.Active = true
-Frame.Draggable = true
-Frame.Parent = ScreenGui
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 400, 0, 350)
+MainFrame.Position = UDim2.new(0.5, -200, 0.5, -175)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
 
--- عنوان
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-Title.BorderSizePixel = 0
-Title.Text = "AI Chat - Gemini Flash"
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Text = "📊 Roblox Tracker"
+Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 18
-Title.Font = Enum.Font.GothamBold
-Title.Parent = Frame
+Title.Parent = MainFrame
 
--- صندوق السؤال
-local QuestionBox = Instance.new("TextBox")
-QuestionBox.Size = UDim2.new(1, -20, 0, 80)
-QuestionBox.Position = UDim2.new(0, 10, 0, 50)
-QuestionBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-QuestionBox.BorderSizePixel = 0
-QuestionBox.Text = ""
-QuestionBox.PlaceholderText = "اكتب سؤالك هنا..."
-QuestionBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-QuestionBox.TextSize = 14
-QuestionBox.TextWrapped = true
-QuestionBox.ClearTextOnFocus = false
-QuestionBox.Parent = Frame
+-- منطقة النتائج
+local ResultsFrame = Instance.new("ScrollingFrame")
+ResultsFrame.Size = UDim2.new(1, -10, 0, 250)
+ResultsFrame.Position = UDim2.new(0, 5, 0, 40)
+ResultsFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ResultsFrame.BorderSizePixel = 0
+ResultsFrame.ScrollBarThickness = 5
+ResultsFrame.Parent = MainFrame
 
--- زر الإرسال
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = ResultsFrame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 5)
+
+-- زر إرسال البيانات
 local SendButton = Instance.new("TextButton")
-SendButton.Size = UDim2.new(1, -20, 0, 35)
-SendButton.Position = UDim2.new(0, 10, 0, 140)
-SendButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-SendButton.BorderSizePixel = 0
-SendButton.Text = "إرسال"
+SendButton.Size = UDim2.new(1, -10, 0, 35)
+SendButton.Position = UDim2.new(0, 5, 0, 295)
+SendButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
 SendButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-SendButton.TextSize = 15
-SendButton.Font = Enum.Font.GothamBold
-SendButton.Parent = Frame
+SendButton.Text = "إرسال البيانات 📤"
+SendButton.Font = Enum.Font.SourceSansBold
+SendButton.TextSize = 14
+SendButton.Parent = MainFrame
 
--- صندوق الرد
-local ResponseBox = Instance.new("TextLabel")
-ResponseBox.Size = UDim2.new(1, -20, 0, 120)
-ResponseBox.Position = UDim2.new(0, 10, 0, 185)
-ResponseBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-ResponseBox.BorderSizePixel = 0
-ResponseBox.Text = "الرد بيظهر هنا..."
-ResponseBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-ResponseBox.TextSize = 13
-ResponseBox.TextWrapped = true
-ResponseBox.Parent = Frame
-
--- زر الإغلاق
 local CloseButton = Instance.new("TextButton")
-CloseButton.Size = UDim2.new(1, -20, 0, 30)
-CloseButton.Position = UDim2.new(0, 10, 0, 315)
-CloseButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-CloseButton.BorderSizePixel = 0
-CloseButton.Text = "إغلاق"
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Position = UDim2.new(1, -35, 0, 3)
+CloseButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseButton.TextSize = 14
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.Parent = Frame
+CloseButton.Text = "X"
+CloseButton.Font = Enum.Font.SourceSansBold
+CloseButton.TextSize = 16
+CloseButton.Parent = MainFrame
 
--- وظيفة الإرسال
-local function sendQuestion()
-    local question = QuestionBox.Text
-    if question ~= "" then
-        ResponseBox.Text = "جاري التفكير..."
-        SendButton.Text = "..."
-        SendButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-        
-        -- استدعاء الـ AI
-        local success, result = pcall(function()
-            return askAI(question)
-        end)
-        
-        if success then
-            ResponseBox.Text = result
-        else
-            ResponseBox.Text = "خطأ: " .. tostring(result)
-        end
-        
-        SendButton.Text = "إرسال"
-        SendButton.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+-- دالة إضافة نص للنتائج
+local function addText(text, color)
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Size = UDim2.new(1, -10, 0, 25)
+    TextLabel.BackgroundTransparency = 1
+    TextLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+    TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TextLabel.Font = Enum.Font.SourceSans
+    TextLabel.TextSize = 12
+    TextLabel.TextWrapped = true
+    TextLabel.Text = text
+    TextLabel.LayoutOrder = #ResultsFrame:GetChildren() + 1
+    TextLabel.Parent = ResultsFrame
+    ResultsFrame.CanvasPosition = Vector2.new(0, ResultsFrame.CanvasSize.Y.Offset)
+end
+
+-- دالة إرسال البيانات
+local function sendData()
+    -- جمع بيانات اللاعب
+    local data = {
+        playerName = LocalPlayer.Name,
+        userId = LocalPlayer.UserId,
+        gameId = game.PlaceId,
+        gameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name,
+        timestamp = os.time(),
+        playerCount = #Players:GetPlayers(),
+        serverId = game.JobId,
+        fps = 60, -- تقدر تغيرها
+        ping = 0 -- تقدر تغيرها
+    }
+    
+    addText("📤 جاري إرسال البيانات...", Color3.fromRGB(255, 255, 0))
+    
+    local jsonData = HttpService:JSONEncode(data)
+    
+    local success, result = pcall(function()
+        return HttpService:PostAsync(API_URL, jsonData, Enum.HttpContentType.ApplicationJson)
+    end)
+    
+    if success then
+        addText("✅ تم إرسال البيانات بنجاح!", Color3.fromRGB(0, 255, 0))
+        addText("📋 البيانات المرسلة:", Color3.fromRGB(255, 255, 255))
+        addText("👤 اللاعب: " .. data.playerName, Color3.fromRGB(200, 200, 200))
+        addText("🆔 ID: " .. data.userId, Color3.fromRGB(200, 200, 200))
+        addText("🎮 اللعبة: " .. data.gameName, Color3.fromRGB(200, 200, 200))
+        addText("👥 عدد اللاعبين: " .. data.playerCount, Color3.fromRGB(200, 200, 200))
+        addText("📡 السيرفر: " .. data.serverId, Color3.fromRGB(200, 200, 200))
+    else
+        addText("❌ فشل الإرسال: " .. tostring(result), Color3.fromRGB(255, 0, 0))
     end
 end
 
--- ربط الأزرار
-SendButton.MouseButton1Click:Connect(sendQuestion)
+SendButton.MouseButton1Click:Connect(sendData)
+
 CloseButton.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
-QuestionBox.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        sendQuestion()
-    end
-end)
-
-print("تم تحميل قائمة AI Chat! 🚀")
+-- إرسال تلقائي عند تشغيل السكريبت
+addText("🚀 تم تشغيل Roblox Tracker", Color3.fromRGB(0, 170, 255))
+sendData()
