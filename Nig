@@ -1,0 +1,214 @@
+-- KeyForge UI (Delta Compatible)
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+
+local API_URL = "https://secure-key-system.lovable.app/api/public/v1/verify"
+local PROJECT_ID = "37e9b6fe26133f21"
+local API_KEY = "ks_80142eaf82077a6fb1b72f810395c8f568ff0fed06add359"
+local GET_KEY_URL = "https://secure-key-system.lovable.app/get/37e9b6fe26133f21"
+
+-- دعم Delta و باقي الـ Executors
+local httpRequest =
+    (syn and syn.request)
+    or (http and http.request)
+    or (fluxus and fluxus.request)
+    or (Krnl and Krnl.request)
+    or http_request
+    or request
+
+-- HWID - يدعم Delta و executors مختلفة
+local HWID
+pcall(function()
+    if gethwid then
+        HWID = gethwid()
+    elseif game:GetService("RbxAnalyticsService") then
+        HWID = game:GetService("RbxAnalyticsService"):GetClientId()
+    else
+        HWID = tostring(math.random(100000, 999999))
+    end
+end)
+HWID = HWID or "unknown_hwid"
+
+--// GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "KeyForge"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = Player:WaitForChild("PlayerGui")
+
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(360, 260)
+main.Position = UDim2.fromScale(0.5, 0.5)
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
+main.BorderSizePixel = 0
+main.Parent = gui
+
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+
+-- شريط السحب
+local dragging, dragInput, dragStart, startPos
+local function update(input)
+    local delta = input.Position - dragStart
+    main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                              startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+main.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then update(input) end
+end)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -30, 0, 45)
+title.Position = UDim2.fromOffset(15, 12)
+title.BackgroundTransparency = 1
+title.Text = "KeyForge"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextSize = 24
+title.Font = Enum.Font.GothamBold
+title.Parent = main
+
+local box = Instance.new("TextBox")
+box.Size = UDim2.new(1, -40, 0, 45)
+box.Position = UDim2.fromOffset(20, 65)
+box.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+box.PlaceholderText = "Enter your key..."
+box.Text = ""
+box.TextColor3 = Color3.new(1, 1, 1)
+box.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+box.TextSize = 14
+box.Font = Enum.Font.Gotham
+box.ClearTextOnFocus = false
+box.BorderSizePixel = 0
+box.Parent = main
+
+Instance.new("UICorner", box).CornerRadius = UDim.new(0, 8)
+
+local getKey = Instance.new("TextButton")
+getKey.Size = UDim2.new(0.5, -25, 0, 42)
+getKey.Position = UDim2.fromOffset(20, 125)
+getKey.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+getKey.Text = "🔑 Get Key"
+getKey.TextColor3 = Color3.new(1, 1, 1)
+getKey.TextSize = 14
+getKey.Font = Enum.Font.GothamSemibold
+getKey.BorderSizePixel = 0
+getKey.Parent = main
+
+Instance.new("UICorner", getKey).CornerRadius = UDim.new(0, 8)
+
+local verify = Instance.new("TextButton")
+verify.Size = UDim2.new(0.5, -25, 0, 42)
+verify.Position = UDim2.new(0.5, 5, 0, 125)
+verify.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+verify.Text = "✓ Verify"
+verify.TextColor3 = Color3.new(1, 1, 1)
+verify.TextSize = 14
+verify.Font = Enum.Font.GothamSemibold
+verify.BorderSizePixel = 0
+verify.Parent = main
+
+Instance.new("UICorner", verify).CornerRadius = UDim.new(0, 8)
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, -40, 0, 60)
+status.Position = UDim2.fromOffset(20, 180)
+status.BackgroundTransparency = 1
+status.Text = "Enter your key, then press Verify."
+status.TextColor3 = Color3.fromRGB(180, 180, 180)
+status.TextSize = 13
+status.Font = Enum.Font.Gotham
+status.TextWrapped = true
+status.Parent = main
+
+--// Get Key
+getKey.MouseButton1Click:Connect(function()
+    if setclipboard then
+        setclipboard(GET_KEY_URL)
+        status.Text = "✅ Get-Key link copied to clipboard."
+    elseif toclipboard then
+        toclipboard(GET_KEY_URL)
+        status.Text = "✅ Get-Key link copied to clipboard."
+    else
+        status.Text = GET_KEY_URL
+    end
+end)
+
+--// Verify
+verify.MouseButton1Click:Connect(function()
+    local key = box.Text
+
+    if key == "" then
+        status.Text = "❌ Please enter a key."
+        return
+    end
+
+    if not httpRequest then
+        status.Text = "❌ HTTP requests are not supported."
+        return
+    end
+
+    status.Text = "Checking key..."
+
+    local success, response = pcall(function()
+        return httpRequest({
+            Url = API_URL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Authorization"] = "Bearer " .. API_KEY
+            },
+            Body = HttpService:JSONEncode({
+                project_id = PROJECT_ID,
+                key = key,
+                hwid = HWID
+            })
+        })
+    end)
+
+    if not success or not response then
+        status.Text = "❌ Could not reach key server."
+        warn("[KeyForge] Request failed: " .. tostring(response))
+        return
+    end
+
+    local body = response.Body or response.body or ""
+
+    local decoded, data = pcall(function()
+        return HttpService:JSONDecode(body)
+    end)
+
+    if not decoded or type(data) ~= "table" then
+        status.Text = "❌ Invalid server response."
+        return
+    end
+
+    if data.valid == true then
+        status.Text = "✅ Key verified! Script unlocked."
+        print("[KeyForge] " .. tostring(data.message or "Access granted"))
+
+        -- ضع كود السكربت المحمي هنا
+        -- مثال:
+        -- loadstring(game:HttpGet("https://example.com/script.lua"))()
+
+        task.wait(1)
+        gui:Destroy()
+    else
+        status.Text = "❌ " .. tostring(data.message or "Invalid key.")
+    end
+end)
