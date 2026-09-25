@@ -1,0 +1,289 @@
+-- ═══════════════════════════════════════════════
+-- 🔑 KeyForge Key Check - Delta Version with GUI
+-- ═══════════════════════════════════════════════
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ═══ الإعدادات ═══
+local API_URL     = "https://secure-key-system.lovable.app/api/public/v1/verify"
+local PROJECT_ID  = "3c3a74de358542e7"
+local API_KEY     = "ks_48c74b0e3da547d88d5e8ae31525d585fc5ef7c41ca5bedc"
+local GET_KEY_URL = "https://secure-key-system.lovable.app/get/3c3a74de358542e7"
+local SAVE_FILE   = "KeyForge_Key.json"
+
+-- ═══ دالة الطلب (تدعم جميع المشغلات) ═══
+local function getRequest()
+    if syn and syn.request then return syn.request end
+    if http and http.request then return http.request end
+    if http_request then return http_request end
+    if request then return request end
+    return nil
+end
+
+-- ═══ حفظ واسترجاع المفتاح ═══
+local function saveKey(key)
+    if writefile then
+        pcall(writefile, SAVE_FILE, HttpService:JSONEncode({key = key}))
+    end
+end
+
+local function loadKey()
+    if readfile and isfile and isfile(SAVE_FILE) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(SAVE_FILE))
+        end)
+        if ok and data and data.key then
+            return data.key
+        end
+    end
+    return nil
+end
+
+-- ═══ التحقق من المفتاح ═══
+local function verifyKey(key)
+    local httpRequest = getRequest()
+    if not httpRequest then
+        return false, "Executor does not support HTTP requests"
+    end
+
+    local ok, response = pcall(httpRequest, {
+        Url = API_URL,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["Authorization"] = "Bearer " .. API_KEY,
+        },
+        Body = HttpService:JSONEncode({
+            project_id = PROJECT_ID,
+            key = key,
+            roblox_user_id = LocalPlayer.UserId,
+            roblox_username = LocalPlayer.Name,
+            roblox_avatar = "https://www.roblox.com/headshot-thumbnail/image?userId="
+                .. LocalPlayer.UserId .. "&width=150&height=150&format=png",
+        }),
+    })
+
+    if not ok or not response then
+        return false, "Could not reach key server"
+    end
+
+    local decoded = pcall(function() response = HttpService:JSONDecode(response.Body) end)
+    if not decoded then
+        return false, "Invalid server response"
+    end
+
+    return response.valid == true, response.message or "Unknown"
+end
+
+-- ═══ واجهة GUI ═══
+local function createGUI()
+    -- حذف الواجهة القديمة
+    if CoreGui:FindFirstChild("KeyForgeUI") then
+        CoreGui.KeyForgeUI:Destroy()
+    end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "KeyForgeUI"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.Parent = (gethui and gethui()) or CoreGui
+
+    -- الإطار الرئيسي
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 420, 0, 280)
+    MainFrame.Position = UDim2.new(0.5, -210, 0.5, -140)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = ScreenGui
+
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 12)
+    UICorner.Parent = MainFrame
+
+    local UIStroke = Instance.new("UIStroke")
+    UIStroke.Color = Color3.fromRGB(88, 101, 242)
+    UIStroke.Thickness = 2
+    UIStroke.Parent = MainFrame
+
+    -- العنوان
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 50)
+    Title.BackgroundTransparency = 1
+    Title.Text = "🔑 KeyForge Authentication"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextSize = 20
+    Title.Font = Enum.Font.GothamBold
+    Title.Parent = MainFrame
+
+    -- زر الإغلاق
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+    CloseBtn.Position = UDim2.new(1, -40, 0, 9)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(230, 60, 60)
+    CloseBtn.Text = "✕"
+    CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseBtn.TextSize = 16
+    CloseBtn.Font = Enum.Font.GothamBold
+    CloseBtn.Parent = MainFrame
+
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = UDim.new(0, 8)
+    CloseCorner.Parent = CloseBtn
+
+    CloseBtn.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+
+    -- النص التوضيحي
+    local InfoLabel = Instance.new("TextLabel")
+    InfoLabel.Size = UDim2.new(1, -40, 0, 25)
+    InfoLabel.Position = UDim2.new(0, 20, 0, 55)
+    InfoLabel.BackgroundTransparency = 1
+    InfoLabel.Text = "Enter your key below to continue:"
+    InfoLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+    InfoLabel.TextSize = 13
+    InfoLabel.Font = Enum.Font.Gotham
+    InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    InfoLabel.Parent = MainFrame
+
+    -- حقل الإدخال
+    local InputFrame = Instance.new("Frame")
+    InputFrame.Size = UDim2.new(1, -40, 0, 45)
+    InputFrame.Position = UDim2.new(0, 20, 0, 90)
+    InputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    InputFrame.BorderSizePixel = 0
+    InputFrame.Parent = MainFrame
+
+    local InputCorner = Instance.new("UICorner")
+    InputCorner.CornerRadius = UDim.new(0, 8)
+    InputCorner.Parent = InputFrame
+
+    local InputStroke = Instance.new("UIStroke")
+    InputStroke.Color = Color3.fromRGB(60, 60, 80)
+    InputStroke.Thickness = 1
+    InputStroke.Parent = InputFrame
+
+    local KeyInput = Instance.new("TextBox")
+    KeyInput.Size = UDim2.new(1, -20, 1, 0)
+    KeyInput.Position = UDim2.new(0, 10, 0, 0)
+    KeyInput.BackgroundTransparency = 1
+    KeyInput.Text = loadKey() or ""
+    KeyInput.PlaceholderText = "XXXX-XXXX-XXXX-XXXX"
+    KeyInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+    KeyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    KeyInput.TextSize = 14
+    KeyInput.Font = Enum.Font.Gotham
+    KeyInput.TextXAlignment = Enum.TextXAlignment.Left
+    KeyInput.ClearTextOnFocus = false
+    KeyInput.Parent = InputFrame
+
+    -- زر "الحصول على مفتاح"
+    local GetKeyBtn = Instance.new("TextButton")
+    GetKeyBtn.Size = UDim2.new(0.5, -25, 0, 40)
+    GetKeyBtn.Position = UDim2.new(0, 20, 0, 150)
+    GetKeyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    GetKeyBtn.Text = "🌐 Get Key"
+    GetKeyBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+    GetKeyBtn.TextSize = 14
+    GetKeyBtn.Font = Enum.Font.GothamBold
+    GetKeyBtn.Parent = MainFrame
+
+    local GetKeyCorner = Instance.new("UICorner")
+    GetKeyCorner.CornerRadius = UDim.new(0, 8)
+    GetKeyCorner.Parent = GetKeyBtn
+
+    GetKeyBtn.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard(GET_KEY_URL)
+        end
+        GetKeyBtn.Text = "✅ Link Copied!"
+        task.wait(2)
+        GetKeyBtn.Text = "🌐 Get Key"
+    end)
+
+    -- زر "التحقق"
+    local VerifyBtn = Instance.new("TextButton")
+    VerifyBtn.Size = UDim2.new(0.5, -25, 0, 40)
+    VerifyBtn.Position = UDim2.new(0.5, 5, 0, 150)
+    VerifyBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    VerifyBtn.Text = "🔓 Verify"
+    VerifyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    VerifyBtn.TextSize = 14
+    VerifyBtn.Font = Enum.Font.GothamBold
+    VerifyBtn.Parent = MainFrame
+
+    local VerifyCorner = Instance.new("UICorner")
+    VerifyCorner.CornerRadius = UDim.new(0, 8)
+    VerifyCorner.Parent = VerifyBtn
+
+    -- رسالة الحالة
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Size = UDim2.new(1, -40, 0, 40)
+    StatusLabel.Position = UDim2.new(0, 20, 0, 210)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = ""
+    StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+    StatusLabel.TextSize = 13
+    StatusLabel.Font = Enum.Font.Gotham
+    StatusLabel.TextWrapped = true
+    StatusLabel.Parent = MainFrame
+
+    -- منطق التحقق
+    local verifying = false
+
+    VerifyBtn.MouseButton1Click:Connect(function()
+        if verifying then return end
+        local key = KeyInput.Text:gsub("%s+", "")
+        if key == "" then
+            StatusLabel.Text = "⚠️ Please enter a key first"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 180, 60)
+            return
+        end
+
+        verifying = true
+        VerifyBtn.Text = "⏳ Verifying..."
+        VerifyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        StatusLabel.Text = "Contacting server..."
+        StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+
+        task.spawn(function()
+            local valid, message = verifyKey(key)
+            if valid then
+                saveKey(key)
+                StatusLabel.Text = "✅ " .. tostring(message)
+                StatusLabel.TextColor3 = Color3.fromRGB(80, 220, 120)
+                VerifyBtn.Text = "✅ Success!"
+                VerifyBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+
+                task.wait(1)
+                ScreenGui:Destroy()
+
+                print("[KeyForge] " .. tostring(message))
+
+                -- ══════════════════════════════════════════
+                -- ✅ ضع كود السكربت المحمي هنا
+                -- ══════════════════════════════════════════
+                loadstring(game:HttpGet("https://your-script-url-here.lua"))()
+                -- ══════════════════════════════════════════
+
+            else
+                StatusLabel.Text = "❌ " .. tostring(message)
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+                VerifyBtn.Text = "🔓 Verify"
+                VerifyBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+                verifying = false
+            end
+        end)
+    end)
+end
+
+-- ═══ التشغيل ═══
+createGUI()
