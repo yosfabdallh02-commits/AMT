@@ -5,6 +5,7 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ═══ الإعدادات ═══
@@ -15,7 +16,7 @@ local API_KEY     = "ks_48c74b0e3da547d88d5e8ae31525d585fc5ef7c41ca5bedc"
 local GET_KEY_URL = "https://secure-key-system.lovable.app/get/3c3a74de358542e7"
 local SAVE_FILE   = "KeyForge_Key.json"
 
--- ═══ دالة الطلب - Delta ═══
+-- ═══ دالة الطلب ═══
 local function getRequest()
     if syn and syn.request then return syn.request end
     if http and http.request then return http.request end
@@ -75,7 +76,7 @@ local function verifyKey(key)
 end
 
 -- ═══════════════════════════════════════════════════════
--- 🎨 واجهة إدخال المفتاح
+-- 🎨 الواجهة الرئيسية
 -- ═══════════════════════════════════════════════════════
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -201,7 +202,7 @@ StatusLabel.TextWrapped = true
 StatusLabel.Parent = KeyFrame
 
 -- ═══════════════════════════════════════════════════════
--- 🔔 نظام الإشعارات المنبثقة
+-- 🔔 نظام الإشعارات
 -- ═══════════════════════════════════════════════════════
 
 local NotifyGui = Instance.new("ScreenGui")
@@ -252,24 +253,28 @@ local function notify(title, text)
     card.MouseButton1Click:Connect(function() card:Destroy() end)
     task.delay(15, function() 
         if card and card.Parent then 
-            local tween = TweenService and TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1, TextTransparency = 1})
-            if tween then tween:Play(); tween.Completed:Wait() end
+            pcall(function()
+                local tween = TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1, TextTransparency = 1})
+                tween:Play()
+                tween.Completed:Wait()
+            end)
             card:Destroy() 
         end 
     end)
 end
 
 -- ═══════════════════════════════════════════════════════
--- 💬 نظام الدعم - Support Messages
+-- 💬 نظام الدعم - Support
 -- ═══════════════════════════════════════════════════════
 
 local lastSeen = nil
 local primed = false
+local shownMessages = {}
 
 local function decode(res)
     if not res then return nil, "no response" end
     local okJ, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-    if not okJ then return nil, "bad JSON (HTTP " .. tostring(res.StatusCode) .. "): " .. tostring(res.Body) end
+    if not okJ then return nil, "bad JSON (HTTP " .. tostring(res.StatusCode) .. ")" end
     if res.StatusCode and res.StatusCode >= 400 then
         return nil, "HTTP " .. res.StatusCode .. ": " .. tostring(data.message)
     end
@@ -284,22 +289,34 @@ local function label(sender)
     return "💬 Support"
 end
 
-local function sendSupport(text)
-    if not httpRequest then warn("[Support] No HTTP function") return end
-    local ok, res = pcall(httpRequest, {
-        Url = MSG_URL, Method = "POST",
-        Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
-        Body = HttpService:JSONEncode({
-            project_id = PROJECT_ID,
-            player_user_id = LocalPlayer.UserId,
-            player_name = LocalPlayer.Name,
-            message = text,
-        }),
-    })
-    if not ok then warn("[Support] request failed: " .. tostring(res)) return end
-    local data, err = decode(res)
-    if not data then warn("[Support] " .. err) notify("⚠️ Support Error", err) return end
-    return data
+local function sendSupport(text, callback)
+    if not httpRequest then 
+        if callback then callback(false, nil) end
+        return 
+    end
+    task.spawn(function()
+        local ok, res = pcall(httpRequest, {
+            Url = MSG_URL, Method = "POST",
+            Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
+            Body = HttpService:JSONEncode({
+                project_id = PROJECT_ID,
+                player_user_id = LocalPlayer.UserId,
+                player_name = LocalPlayer.Name,
+                message = text,
+            }),
+        })
+        if not ok then 
+            if callback then callback(false, nil) end
+            return 
+        end
+        local data, err = decode(res)
+        if not data then 
+            warn("[Support] " .. tostring(err))
+            if callback then callback(false, nil) end
+            return 
+        end
+        if callback then callback(true, data) end
+    end)
 end
 
 local function pollReplies()
@@ -310,19 +327,295 @@ local function pollReplies()
         Url = url, Method = "GET", 
         Headers = { ["Authorization"] = "Bearer " .. API_KEY } 
     })
-    if not ok then warn("[Support] poll failed: " .. tostring(res)) return end
-    local data, err = decode(res)
-    if not data then warn("[Support] " .. err) return end
+    if not ok then return end
+    local data = decode(res)
+    if not data then return end
     for _, m in ipairs(data.messages or {}) do
         lastSeen = m.created_at
-        local who = label(m.sender)
-        if who and primed then
+        if primed then
+            local who = label(m.sender)
             print("[" .. who .. "] " .. tostring(m.message))
             notify(who, tostring(m.message))
         end
     end
     primed = true
 end
+
+-- ═══════════════════════════════════════════════════════
+-- 💬 نافذة الشات
+-- ═══════════════════════════════════════════════════════
+
+local chatOpen = false
+local chatFrame = nil
+
+local function openChat()
+    if chatOpen and chatFrame then return end
+    
+    chatOpen = true
+    chatFrame = Instance.new("Frame")
+    chatFrame.Name = "SupportChat"
+    chatFrame.Size = UDim2.new(0, 500, 0, 550)
+    chatFrame.Position = UDim2.new(0.5, -250, 0.5, -275)
+    chatFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    chatFrame.BorderSizePixel = 0
+    chatFrame.Active = true
+    chatFrame.Draggable = true
+    chatFrame.Parent = ScreenGui
+    Instance.new("UICorner", chatFrame).CornerRadius = UDim.new(0, 12)
+
+    local chatStroke = Instance.new("UIStroke")
+    chatStroke.Color = Color3.fromRGB(88, 101, 242)
+    chatStroke.Thickness = 2
+    chatStroke.Parent = chatFrame
+
+    local chatTitle = Instance.new("TextLabel")
+    chatTitle.Size = UDim2.new(1, -100, 0, 50)
+    chatTitle.Position = UDim2.new(0, 15, 0, 0)
+    chatTitle.BackgroundTransparency = 1
+    chatTitle.Text = "💬 Support Chat - AI Assistant"
+    chatTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    chatTitle.TextSize = 18
+    chatTitle.Font = Enum.Font.GothamBold
+    chatTitle.TextXAlignment = Enum.TextXAlignment.Left
+    chatTitle.Parent = chatFrame
+
+    local chatClose = Instance.new("TextButton")
+    chatClose.Size = UDim2.new(0, 32, 0, 32)
+    chatClose.Position = UDim2.new(1, -42, 0, 9)
+    chatClose.BackgroundColor3 = Color3.fromRGB(230, 60, 60)
+    chatClose.Text = "✕"
+    chatClose.TextColor3 = Color3.fromRGB(255, 255, 255)
+    chatClose.TextSize = 16
+    chatClose.Font = Enum.Font.GothamBold
+    chatClose.Parent = chatFrame
+    Instance.new("UICorner", chatClose).CornerRadius = UDim.new(0, 8)
+    chatClose.MouseButton1Click:Connect(function() 
+        chatFrame:Destroy() 
+        chatOpen = false
+        chatFrame = nil
+    end)
+
+    local messagesFrame = Instance.new("ScrollingFrame")
+    messagesFrame.Size = UDim2.new(1, -30, 1, -170)
+    messagesFrame.Position = UDim2.new(0, 15, 0, 85)
+    messagesFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+    messagesFrame.BorderSizePixel = 0
+    messagesFrame.ScrollBarThickness = 6
+    messagesFrame.ScrollBarImageColor3 = Color3.fromRGB(88, 101, 242)
+    messagesFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    messagesFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    messagesFrame.Parent = chatFrame
+    Instance.new("UICorner", messagesFrame).CornerRadius = UDim.new(0, 10)
+
+    local msgLayout = Instance.new("UIListLayout")
+    msgLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    msgLayout.Padding = UDim.new(0, 8)
+    msgLayout.Parent = messagesFrame
+
+    local msgPadding = Instance.new("UIPadding")
+    msgPadding.PaddingTop = UDim.new(0, 10)
+    msgPadding.PaddingBottom = UDim.new(0, 10)
+    msgPadding.PaddingLeft = UDim.new(0, 10)
+    msgPadding.PaddingRight = UDim.new(0, 10)
+    msgPadding.Parent = messagesFrame
+
+    local inputBox = Instance.new("Frame")
+    inputBox.Size = UDim2.new(1, -30, 0, 50)
+    inputBox.Position = UDim2.new(0, 15, 1, -65)
+    inputBox.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    inputBox.BorderSizePixel = 0
+    inputBox.Parent = chatFrame
+    Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 10)
+
+    local inputStroke = Instance.new("UIStroke")
+    inputStroke.Color = Color3.fromRGB(60, 60, 80)
+    inputStroke.Thickness = 1
+    inputStroke.Parent = inputBox
+
+    local msgInput = Instance.new("TextBox")
+    msgInput.Size = UDim2.new(1, -80, 1, 0)
+    msgInput.Position = UDim2.new(0, 12, 0, 0)
+    msgInput.BackgroundTransparency = 1
+    msgInput.PlaceholderText = "Type your message..."
+    msgInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+    msgInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    msgInput.TextSize = 14
+    msgInput.Font = Enum.Font.Gotham
+    msgInput.TextXAlignment = Enum.TextXAlignment.Left
+    msgInput.ClearTextOnFocus = false
+    msgInput.Parent = inputBox
+
+    local sendBtn = Instance.new("TextButton")
+    sendBtn.Size = UDim2.new(0, 60, 1, -10)
+    sendBtn.Position = UDim2.new(1, -65, 0, 5)
+    sendBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    sendBtn.Text = "➤"
+    sendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    sendBtn.TextSize = 20
+    sendBtn.Font = Enum.Font.GothamBold
+    sendBtn.Parent = inputBox
+    Instance.new("UICorner", sendBtn).CornerRadius = UDim.new(0, 8)
+
+    local msgOrder = 0
+
+    local function addChatBubble(sender, text, msgId)
+        if msgId and shownMessages[msgId] then return end
+        if msgId then shownMessages[msgId] = true end
+
+        msgOrder = msgOrder + 1
+
+        local isUser = (sender == "player" or sender == "user")
+        local isAI = (sender == "ai" or sender == "bot")
+        local isOwner = (sender == "owner")
+
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, 0, 0, 0)
+        container.AutomaticSize = Enum.AutomaticSize.Y
+        container.BackgroundTransparency = 1
+        container.LayoutOrder = msgOrder
+        container.Parent = messagesFrame
+
+        local bubble = Instance.new("TextLabel")
+        bubble.BackgroundColor3 = isUser and Color3.fromRGB(88, 101, 242) 
+                                    or (isAI and Color3.fromRGB(45, 45, 60) 
+                                    or (isOwner and Color3.fromRGB(200, 100, 40) 
+                                    or Color3.fromRGB(45, 45, 60)))
+        bubble.TextColor3 = Color3.fromRGB(255, 255, 255)
+        bubble.TextSize = 13
+        bubble.Font = Enum.Font.Gotham
+        bubble.TextWrapped = true
+        bubble.TextXAlignment = Enum.TextXAlignment.Left
+        bubble.TextYAlignment = Enum.TextYAlignment.Top
+        bubble.RichText = true
+
+        local prefix = isUser and "👤 You: " or (isAI and "🤖 AI: " or (isOwner and "👑 Owner: " or "💬: "))
+        bubble.Text = "<b>" .. prefix .. "</b>" .. tostring(text):gsub("<", "&lt;")
+
+        bubble.Size = UDim2.new(0.75, 0, 0, 0)
+        bubble.AutomaticSize = Enum.AutomaticSize.XY
+        bubble.Position = isUser and UDim2.new(0.25, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
+
+        local pad = Instance.new("UIPadding", bubble)
+        pad.PaddingTop = UDim.new(0, 8)
+        pad.PaddingBottom = UDim.new(0, 8)
+        pad.PaddingLeft = UDim.new(0, 12)
+        pad.PaddingRight = UDim.new(0, 12)
+
+        Instance.new("UICorner", bubble).CornerRadius = UDim.new(0, 10)
+        bubble.Parent = container
+
+        task.wait()
+        messagesFrame.CanvasPosition = Vector2.new(0, messagesFrame.AbsoluteCanvasSize.Y)
+    end
+
+    addChatBubble("ai", "Hello " .. LocalPlayer.Name .. "! 👋 I'm your AI assistant. How can I help you today?", nil)
+
+    -- جلب الرسائل القديمة
+    task.spawn(function()
+        if not httpRequest then return end
+        local url = MSG_URL .. "?project_id=" .. PROJECT_ID .. "&player_user_id=" .. LocalPlayer.UserId
+        local ok, res = pcall(httpRequest, { 
+            Url = url, Method = "GET", 
+            Headers = { ["Authorization"] = "Bearer " .. API_KEY } 
+        })
+        if ok and res then
+            local data = decode(res)
+            if data and data.messages then
+                for _, m in ipairs(data.messages) do
+                    local msgId = m.id or m.created_at
+                    if m.created_at then lastSeen = m.created_at end
+                    if msgId then
+                        addChatBubble(m.sender or "ai", m.message or "", msgId)
+                    end
+                end
+            end
+        end
+    end)
+
+    local sending = false
+    local function sendChatMessage()
+        if sending then return end
+        local text = msgInput.Text:gsub("^%s+", ""):gsub("%s+$", "")
+        if text == "" then return end
+
+        sending = true
+        msgInput.Text = ""
+        addChatBubble("player", text, nil)
+
+        sendSupport(text, function(success, data)
+            sending = false
+            if not success then
+                addChatBubble("ai", "⚠️ Connection error. Please try again.", nil)
+                return
+            end
+
+            if data and data.replies then
+                for _, r in ipairs(data.replies) do
+                    local msgText = r.message or r.text or ""
+                    local sender = r.sender or "ai"
+                    local msgId = r.id or r.created_at or (tostring(sender) .. msgText)
+                    addChatBubble(sender, msgText, msgId)
+                    if r.created_at then lastSeen = r.created_at end
+                end
+            end
+            if data and data.reply then addChatBubble("ai", data.reply, nil) end
+            if data and data.response then addChatBubble("ai", data.response, nil) end
+        end)
+    end
+
+    sendBtn.MouseButton1Click:Connect(sendChatMessage)
+    msgInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed then sendChatMessage() end
+    end)
+
+    -- poll داخل الشات
+    task.spawn(function()
+        while chatFrame and chatFrame.Parent do
+            task.wait(5)
+            if not httpRequest then break end
+            local url = MSG_URL .. "?project_id=" .. PROJECT_ID .. "&player_user_id=" .. LocalPlayer.UserId
+            if lastSeen then url = url .. "&since=" .. HttpService:UrlEncode(lastSeen) end
+            local ok, res = pcall(httpRequest, { 
+                Url = url, Method = "GET", 
+                Headers = { ["Authorization"] = "Bearer " .. API_KEY } 
+            })
+            if ok and res then
+                local data = decode(res)
+                if data and data.messages then
+                    for _, m in ipairs(data.messages) do
+                        local msgId = m.id or m.created_at
+                        if m.created_at then lastSeen = m.created_at end
+                        if msgId then
+                            addChatBubble(m.sender or "ai", m.message or "", msgId)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- ═══ زر فتح الشات ═══
+local ChatOpenBtn = Instance.new("TextButton")
+ChatOpenBtn.Name = "ChatOpenBtn"
+ChatOpenBtn.Size = UDim2.new(0, 150, 0, 45)
+ChatOpenBtn.Position = UDim2.new(0, 20, 1, -65)
+ChatOpenBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+ChatOpenBtn.Text = "💬 Support Chat"
+ChatOpenBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ChatOpenBtn.TextSize = 14
+ChatOpenBtn.Font = Enum.Font.GothamBold
+ChatOpenBtn.Visible = false
+ChatOpenBtn.Parent = ScreenGui
+Instance.new("UICorner", ChatOpenBtn).CornerRadius = UDim.new(0, 10)
+
+local ChatBtnStroke = Instance.new("UIStroke", ChatOpenBtn)
+ChatBtnStroke.Color = Color3.fromRGB(120, 130, 255)
+ChatBtnStroke.Thickness = 1.5
+
+ChatOpenBtn.MouseButton1Click:Connect(function()
+    openChat()
+end)
 
 -- ═══════════════════════════════════════════════════════
 -- ⚡ منطق التحقق
@@ -356,6 +649,7 @@ VerifyBtn.MouseButton1Click:Connect(function()
 
             task.wait(1)
             KeyFrame.Visible = false
+            ChatOpenBtn.Visible = true
 
             print("[KeyForge] " .. tostring(message))
             notify("✅ Key Accepted", tostring(message))
@@ -366,7 +660,7 @@ VerifyBtn.MouseButton1Click:Connect(function()
             -- loadstring(game:HttpGet("https://your-script-url.lua"))()
             -- ═══════════════════════════════════════════
 
-            -- بدء polling للرسائل
+            -- بدء polling للإشعارات
             pollReplies()
             task.spawn(function() 
                 while task.wait(5) do 
@@ -384,9 +678,10 @@ VerifyBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
--- ═══ دالة عامة لإرسال رسالة (تستخدم من أي مكان) ═══
+-- ═══ دالة عامة ═══
 getgenv().KeyForgeSupport = {
-    send = function(text) return sendSupport(text) end,
+    send = function(text, cb) return sendSupport(text, cb) end,
     notify = function(title, text) notify(title, text) end,
     verify = function(key) return verifyKey(key) end,
+    openChat = function() openChat() end,
 }
