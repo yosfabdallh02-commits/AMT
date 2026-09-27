@@ -1,214 +1,544 @@
--- KeyForge UI (Delta Compatible)
+-- ═══════════════════════════════════════════════════════
+-- 🔑 KeyForge + AI Support Chat - Delta Version
+-- ═══════════════════════════════════════════════════════
+
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
-local Player = Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
 
-local API_URL = "https://secure-key-system.lovable.app/api/public/v1/verify"
-local PROJECT_ID = "37e9b6fe26133f21"
-local API_KEY = "ks_80142eaf82077a6fb1b72f810395c8f568ff0fed06add359"
-local GET_KEY_URL = "https://secure-key-system.lovable.app/get/37e9b6fe26133f21"
+-- ═══ الإعدادات ═══
+local API_URL      = "https://secure-key-system.lovable.app/api/public/v1/verify"
+local MSG_URL      = "https://secure-key-system.lovable.app/api/public/v1/messages"
+local PROJECT_ID   = "3c3a74de358542e7"
+local API_KEY      = "ks_48c74b0e3da547d88d5e8ae31525d585fc5ef7c41ca5bedc"
+local GET_KEY_URL  = "https://secure-key-system.lovable.app/get/3c3a74de358542e7"
+local SAVE_FILE    = "KeyForge_Key.json"
 
--- دعم Delta و باقي الـ Executors
-local httpRequest =
-    (syn and syn.request)
-    or (http and http.request)
-    or (fluxus and fluxus.request)
-    or (Krnl and Krnl.request)
-    or http_request
-    or request
-
--- HWID - يدعم Delta و executors مختلفة
-local HWID
-pcall(function()
-    if gethwid then
-        HWID = gethwid()
-    elseif game:GetService("RbxAnalyticsService") then
-        HWID = game:GetService("RbxAnalyticsService"):GetClientId()
-    else
-        HWID = tostring(math.random(100000, 999999))
-    end
-end)
-HWID = HWID or "unknown_hwid"
-
---// GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "KeyForge"
-gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = Player:WaitForChild("PlayerGui")
-
-local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(360, 260)
-main.Position = UDim2.fromScale(0.5, 0.5)
-main.AnchorPoint = Vector2.new(0.5, 0.5)
-main.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
-main.BorderSizePixel = 0
-main.Parent = gui
-
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
-
--- شريط السحب
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-    local delta = input.Position - dragStart
-    main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-                              startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+-- ═══ دوال الطلب ═══
+local function getRequest()
+    if syn and syn.request then return syn.request end
+    if http and http.request then return http.request end
+    if http_request then return http_request end
+    if request then return request end
+    return nil
 end
-main.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = main.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then dragging = false end
-        end)
+
+local httpRequest = getRequest()
+local HWID = (gethwid and gethwid()) or 
+             (game:GetService("RbxAnalyticsService") and game:GetService("RbxAnalyticsService"):GetClientId()) or 
+             "UNKNOWN_HWID"
+
+-- ═══ حفظ المفتاح ═══
+local function saveKey(key)
+    if writefile then pcall(writefile, SAVE_FILE, HttpService:JSONEncode({key = key})) end
+end
+
+local function loadKey()
+    if readfile and isfile and isfile(SAVE_FILE) then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(SAVE_FILE)) end)
+        if ok and data and data.key then return data.key end
     end
-end)
-main.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if input == dragInput and dragging then update(input) end
-end)
+    return nil
+end
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -30, 0, 45)
-title.Position = UDim2.fromOffset(15, 12)
-title.BackgroundTransparency = 1
-title.Text = "KeyForge"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.TextSize = 24
-title.Font = Enum.Font.GothamBold
-title.Parent = main
+-- ═══ التحقق من المفتاح ═══
+local function verifyKey(key)
+    if not httpRequest then return false, "Executor missing HTTP" end
+    local ok, response = pcall(httpRequest, {
+        Url = API_URL, Method = "POST",
+        Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
+        Body = HttpService:JSONEncode({
+            project_id = PROJECT_ID, key = key, hwid = HWID,
+            roblox_user_id = LocalPlayer.UserId, roblox_username = LocalPlayer.Name,
+            roblox_avatar = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=150&height=150&format=png",
+        }),
+    })
+    if not ok or not response then return false, "Could not reach key server" end
+    local decoded = pcall(function() response = HttpService:JSONDecode(response.Body) end)
+    if not decoded then return false, "Invalid server response" end
+    return response.valid == true, response.message or "Unknown"
+end
 
-local box = Instance.new("TextBox")
-box.Size = UDim2.new(1, -40, 0, 45)
-box.Position = UDim2.fromOffset(20, 65)
-box.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
-box.PlaceholderText = "Enter your key..."
-box.Text = ""
-box.TextColor3 = Color3.new(1, 1, 1)
-box.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
-box.TextSize = 14
-box.Font = Enum.Font.Gotham
-box.ClearTextOnFocus = false
-box.BorderSizePixel = 0
-box.Parent = main
-
-Instance.new("UICorner", box).CornerRadius = UDim.new(0, 8)
-
-local getKey = Instance.new("TextButton")
-getKey.Size = UDim2.new(0.5, -25, 0, 42)
-getKey.Position = UDim2.fromOffset(20, 125)
-getKey.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-getKey.Text = "🔑 Get Key"
-getKey.TextColor3 = Color3.new(1, 1, 1)
-getKey.TextSize = 14
-getKey.Font = Enum.Font.GothamSemibold
-getKey.BorderSizePixel = 0
-getKey.Parent = main
-
-Instance.new("UICorner", getKey).CornerRadius = UDim.new(0, 8)
-
-local verify = Instance.new("TextButton")
-verify.Size = UDim2.new(0.5, -25, 0, 42)
-verify.Position = UDim2.new(0.5, 5, 0, 125)
-verify.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-verify.Text = "✓ Verify"
-verify.TextColor3 = Color3.new(1, 1, 1)
-verify.TextSize = 14
-verify.Font = Enum.Font.GothamSemibold
-verify.BorderSizePixel = 0
-verify.Parent = main
-
-Instance.new("UICorner", verify).CornerRadius = UDim.new(0, 8)
-
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -40, 0, 60)
-status.Position = UDim2.fromOffset(20, 180)
-status.BackgroundTransparency = 1
-status.Text = "Enter your key, then press Verify."
-status.TextColor3 = Color3.fromRGB(180, 180, 180)
-status.TextSize = 13
-status.Font = Enum.Font.Gotham
-status.TextWrapped = true
-status.Parent = main
-
---// Get Key
-getKey.MouseButton1Click:Connect(function()
-    if setclipboard then
-        setclipboard(GET_KEY_URL)
-        status.Text = "✅ Get-Key link copied to clipboard."
-    elseif toclipboard then
-        toclipboard(GET_KEY_URL)
-        status.Text = "✅ Get-Key link copied to clipboard."
-    else
-        status.Text = GET_KEY_URL
-    end
-end)
-
---// Verify
-verify.MouseButton1Click:Connect(function()
-    local key = box.Text
-
-    if key == "" then
-        status.Text = "❌ Please enter a key."
-        return
-    end
-
-    if not httpRequest then
-        status.Text = "❌ HTTP requests are not supported."
-        return
-    end
-
-    status.Text = "Checking key..."
-
-    local success, response = pcall(function()
-        return httpRequest({
-            Url = API_URL,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json",
-                ["Authorization"] = "Bearer " .. API_KEY
-            },
+-- ═══ إرسال رسالة للدعم ═══
+local function sendSupport(text, callback)
+    if not httpRequest then return end
+    task.spawn(function()
+        local ok, res = pcall(httpRequest, {
+            Url = MSG_URL, Method = "POST",
+            Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
             Body = HttpService:JSONEncode({
                 project_id = PROJECT_ID,
-                key = key,
-                hwid = HWID
-            })
+                player_user_id = LocalPlayer.UserId,
+                player_name = LocalPlayer.Name,
+                message = text,
+            }),
         })
+        if not ok or not res then 
+            if callback then callback(false, "Connection failed") end
+            return 
+        end
+        local success, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+        if success and data then
+            if callback then callback(true, data) end
+        else
+            if callback then callback(false, "Invalid response") end
+        end
+    end)
+end
+
+-- ═══ جلب الردود ═══
+local function fetchReplies(lastSeen, callback)
+    if not httpRequest then return end
+    task.spawn(function()
+        local url = MSG_URL .. "?project_id=" .. PROJECT_ID .. "&player_user_id=" .. LocalPlayer.UserId
+        if lastSeen then url = url .. "&since=" .. HttpService:UrlEncode(lastSeen) end
+        local ok, res = pcall(httpRequest, {
+            Url = url, Method = "GET",
+            Headers = { ["Authorization"] = "Bearer " .. API_KEY },
+        })
+        if not ok or not res then 
+            if callback then callback(false, nil) end
+            return 
+        end
+        local success, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+        if success and data then
+            if callback then callback(true, data.messages or data.replies or {}) end
+        else
+            if callback then callback(false, nil) end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════
+-- 🎨 واجهة GUI
+-- ═══════════════════════════════════════════════════════
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "KeyForgeUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = (gethui and gethui()) or CoreGui
+
+-- ═══ نافذة المفتاح ═══
+local KeyFrame = Instance.new("Frame")
+KeyFrame.Name = "KeyFrame"
+KeyFrame.Size = UDim2.new(0, 420, 0, 280)
+KeyFrame.Position = UDim2.new(0.5, -210, 0.5, -140)
+KeyFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+KeyFrame.BorderSizePixel = 0
+KeyFrame.Active = true
+KeyFrame.Draggable = true
+KeyFrame.Parent = ScreenGui
+
+Instance.new("UICorner", KeyFrame).CornerRadius = UDim.new(0, 12)
+
+local KeyStroke = Instance.new("UIStroke")
+KeyStroke.Color = Color3.fromRGB(88, 101, 242)
+KeyStroke.Thickness = 2
+KeyStroke.Parent = KeyFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 50)
+Title.BackgroundTransparency = 1
+Title.Text = "🔑 KeyForge Authentication"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 20
+Title.Font = Enum.Font.GothamBold
+Title.Parent = KeyFrame
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+CloseBtn.Position = UDim2.new(1, -40, 0, 9)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(230, 60, 60)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 16
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = KeyFrame
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+local InfoLabel = Instance.new("TextLabel")
+InfoLabel.Size = UDim2.new(1, -40, 0, 25)
+InfoLabel.Position = UDim2.new(0, 20, 0, 55)
+InfoLabel.BackgroundTransparency = 1
+InfoLabel.Text = "Enter your key below to continue:"
+InfoLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+InfoLabel.TextSize = 13
+InfoLabel.Font = Enum.Font.Gotham
+InfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+InfoLabel.Parent = KeyFrame
+
+local InputFrame = Instance.new("Frame")
+InputFrame.Size = UDim2.new(1, -40, 0, 45)
+InputFrame.Position = UDim2.new(0, 20, 0, 90)
+InputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+InputFrame.BorderSizePixel = 0
+InputFrame.Parent = KeyFrame
+Instance.new("UICorner", InputFrame).CornerRadius = UDim.new(0, 8)
+
+local InputStroke = Instance.new("UIStroke")
+InputStroke.Color = Color3.fromRGB(60, 60, 80)
+InputStroke.Thickness = 1
+InputStroke.Parent = InputFrame
+
+local KeyInput = Instance.new("TextBox")
+KeyInput.Size = UDim2.new(1, -20, 1, 0)
+KeyInput.Position = UDim2.new(0, 10, 0, 0)
+KeyInput.BackgroundTransparency = 1
+KeyInput.Text = loadKey() or ""
+KeyInput.PlaceholderText = "XXXX-XXXX-XXXX-XXXX"
+KeyInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+KeyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+KeyInput.TextSize = 14
+KeyInput.Font = Enum.Font.Gotham
+KeyInput.TextXAlignment = Enum.TextXAlignment.Left
+KeyInput.ClearTextOnFocus = false
+KeyInput.Parent = InputFrame
+
+local GetKeyBtn = Instance.new("TextButton")
+GetKeyBtn.Size = UDim2.new(0.5, -25, 0, 40)
+GetKeyBtn.Position = UDim2.new(0, 20, 0, 150)
+GetKeyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+GetKeyBtn.Text = "🌐 Get Key"
+GetKeyBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
+GetKeyBtn.TextSize = 14
+GetKeyBtn.Font = Enum.Font.GothamBold
+GetKeyBtn.Parent = KeyFrame
+Instance.new("UICorner", GetKeyBtn).CornerRadius = UDim.new(0, 8)
+
+GetKeyBtn.MouseButton1Click:Connect(function()
+    if setclipboard then setclipboard(GET_KEY_URL) end
+    GetKeyBtn.Text = "✅ Link Copied!"
+    task.wait(2)
+    GetKeyBtn.Text = "🌐 Get Key"
+end)
+
+local VerifyBtn = Instance.new("TextButton")
+VerifyBtn.Size = UDim2.new(0.5, -25, 0, 40)
+VerifyBtn.Position = UDim2.new(0.5, 5, 0, 150)
+VerifyBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+VerifyBtn.Text = "🔓 Verify"
+VerifyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+VerifyBtn.TextSize = 14
+VerifyBtn.Font = Enum.Font.GothamBold
+VerifyBtn.Parent = KeyFrame
+Instance.new("UICorner", VerifyBtn).CornerRadius = UDim.new(0, 8)
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -40, 0, 40)
+StatusLabel.Position = UDim2.new(0, 20, 0, 210)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = ""
+StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+StatusLabel.TextSize = 13
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextWrapped = true
+StatusLabel.Parent = KeyFrame
+
+-- ═══════════════════════════════════════════════════════
+-- 💬 نافذة شات الدعم (تنشأ بعد التحقق)
+-- ═══════════════════════════════════════════════════════
+
+local function openSupportChat()
+    if ScreenGui:FindFirstChild("ChatFrame") then return end
+
+    local ChatFrame = Instance.new("Frame")
+    ChatFrame.Name = "ChatFrame"
+    ChatFrame.Size = UDim2.new(0, 500, 0, 550)
+    ChatFrame.Position = UDim2.new(0.5, -250, 0.5, -275)
+    ChatFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    ChatFrame.BorderSizePixel = 0
+    ChatFrame.Active = true
+    ChatFrame.Draggable = true
+    ChatFrame.Parent = ScreenGui
+    Instance.new("UICorner", ChatFrame).CornerRadius = UDim.new(0, 12)
+
+    local ChatStroke = Instance.new("UIStroke")
+    ChatStroke.Color = Color3.fromRGB(88, 101, 242)
+    ChatStroke.Thickness = 2
+    ChatStroke.Parent = ChatFrame
+
+    -- العنوان
+    local ChatTitle = Instance.new("TextLabel")
+    ChatTitle.Size = UDim2.new(1, -100, 0, 50)
+    ChatTitle.Position = UDim2.new(0, 15, 0, 0)
+    ChatTitle.BackgroundTransparency = 1
+    ChatTitle.Text = "💬 Support Chat - AI Assistant"
+    ChatTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ChatTitle.TextSize = 18
+    ChatTitle.Font = Enum.Font.GothamBold
+    ChatTitle.TextXAlignment = Enum.TextXAlignment.Left
+    ChatTitle.Parent = ChatFrame
+
+    -- زر الإغلاق
+    local ChatClose = Instance.new("TextButton")
+    ChatClose.Size = UDim2.new(0, 32, 0, 32)
+    ChatClose.Position = UDim2.new(1, -42, 0, 9)
+    ChatClose.BackgroundColor3 = Color3.fromRGB(230, 60, 60)
+    ChatClose.Text = "✕"
+    ChatClose.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ChatClose.TextSize = 16
+    ChatClose.Font = Enum.Font.GothamBold
+    ChatClose.Parent = ChatFrame
+    Instance.new("UICorner", ChatClose).CornerRadius = UDim.new(0, 8)
+    ChatClose.MouseButton1Click:Connect(function() ChatFrame:Destroy() end)
+
+    -- مؤشر الحالة
+    local StatusDot = Instance.new("Frame")
+    StatusDot.Size = UDim2.new(0, 10, 0, 10)
+    StatusDot.Position = UDim2.new(1, -60, 0, 55)
+    StatusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 120)
+    StatusDot.BorderSizePixel = 0
+    StatusDot.Parent = ChatFrame
+    Instance.new("UICorner", StatusDot).CornerRadius = UDim.new(1, 0)
+
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Size = UDim2.new(0, 80, 0, 15)
+    StatusText.Position = UDim2.new(1, -80, 0, 65)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Text = "Online"
+    StatusText.TextColor3 = Color3.fromRGB(80, 220, 120)
+    StatusText.TextSize = 11
+    StatusText.Font = Enum.Font.Gotham
+    StatusText.Parent = ChatFrame
+
+    -- منطقة الرسائل (ScrollingFrame)
+    local MessagesFrame = Instance.new("ScrollingFrame")
+    MessagesFrame.Size = UDim2.new(1, -30, 1, -170)
+    MessagesFrame.Position = UDim2.new(0, 15, 0, 85)
+    MessagesFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+    MessagesFrame.BorderSizePixel = 0
+    MessagesFrame.ScrollBarThickness = 6
+    MessagesFrame.ScrollBarImageColor3 = Color3.fromRGB(88, 101, 242)
+    MessagesFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    MessagesFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    MessagesFrame.Parent = ChatFrame
+    Instance.new("UICorner", MessagesFrame).CornerRadius = UDim.new(0, 10)
+
+    local MessageLayout = Instance.new("UIListLayout")
+    MessageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    MessageLayout.Padding = UDim.new(0, 8)
+    MessageLayout.Parent = MessagesFrame
+
+    local MessagePadding = Instance.new("UIPadding")
+    MessagePadding.PaddingTop = UDim.new(0, 10)
+    MessagePadding.PaddingBottom = UDim.new(0, 10)
+    MessagePadding.PaddingLeft = UDim.new(0, 10)
+    MessagePadding.PaddingRight = UDim.new(0, 10)
+    MessagePadding.Parent = MessagesFrame
+
+    -- حقل الإدخال
+    local InputBox = Instance.new("Frame")
+    InputBox.Size = UDim2.new(1, -30, 0, 50)
+    InputBox.Position = UDim2.new(0, 15, 1, -65)
+    InputBox.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    InputBox.BorderSizePixel = 0
+    InputBox.Parent = ChatFrame
+    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 10)
+
+    local InputBoxStroke = Instance.new("UIStroke")
+    InputBoxStroke.Color = Color3.fromRGB(60, 60, 80)
+    InputBoxStroke.Thickness = 1
+    InputBoxStroke.Parent = InputBox
+
+    local MsgInput = Instance.new("TextBox")
+    MsgInput.Size = UDim2.new(1, -80, 1, 0)
+    MsgInput.Position = UDim2.new(0, 12, 0, 0)
+    MsgInput.BackgroundTransparency = 1
+    MsgInput.PlaceholderText = "Type your message..."
+    MsgInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
+    MsgInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MsgInput.TextSize = 14
+    MsgInput.Font = Enum.Font.Gotham
+    MsgInput.TextXAlignment = Enum.TextXAlignment.Left
+    MsgInput.ClearTextOnFocus = false
+    MsgInput.Parent = InputBox
+
+    local SendBtn = Instance.new("TextButton")
+    SendBtn.Size = UDim2.new(0, 60, 1, -10)
+    SendBtn.Position = UDim2.new(1, -65, 0, 5)
+    SendBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    SendBtn.Text = "➤"
+    SendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SendBtn.TextSize = 20
+    SendBtn.Font = Enum.Font.GothamBold
+    SendBtn.Parent = InputBox
+    Instance.new("UICorner", SendBtn).CornerRadius = UDim.new(0, 8)
+
+    -- دالة إضافة رسالة للشات
+    local messageOrder = 0
+    local lastSeenTime = nil
+    local shownMessages = {}
+
+    local function addMessage(sender, text, msgId)
+        if msgId and shownMessages[msgId] then return end
+        if msgId then shownMessages[msgId] = true end
+
+        messageOrder = messageOrder + 1
+
+        local isUser = (sender == "player" or sender == "user")
+        local isAI = (sender == "ai" or sender == "bot")
+        local isOwner = (sender == "owner")
+
+        local MsgContainer = Instance.new("Frame")
+        MsgContainer.Size = UDim2.new(1, 0, 0, 0)
+        MsgContainer.AutomaticSize = Enum.AutomaticSize.Y
+        MsgContainer.BackgroundTransparency = 1
+        MsgContainer.LayoutOrder = messageOrder
+        MsgContainer.Parent = MessagesFrame
+
+        local MsgBubble = Instance.new("TextLabel")
+        MsgBubble.BackgroundColor3 = isUser and Color3.fromRGB(88, 101, 242) 
+                                    or (isAI and Color3.fromRGB(45, 45, 60) 
+                                    or (isOwner and Color3.fromRGB(200, 100, 40) 
+                                    or Color3.fromRGB(45, 45, 60)))
+        MsgBubble.TextColor3 = Color3.fromRGB(255, 255, 255)
+        MsgBubble.TextSize = 13
+        MsgBubble.Font = Enum.Font.Gotham
+        MsgBubble.TextWrapped = true
+        MsgBubble.TextXAlignment = Enum.TextXAlignment.Left
+        MsgBubble.TextYAlignment = Enum.TextYAlignment.Top
+
+        local prefix = isUser and "👤 You: " or (isAI and "🤖 AI: " or (isOwner and "👑 Owner: " or "💬: "))
+        MsgBubble.Text = prefix .. text
+
+        -- حساب العرض تلقائياً
+        MsgBubble.Size = UDim2.new(0.75, 0, 0, 0)
+        MsgBubble.AutomaticSize = Enum.AutomaticSize.XY
+        MsgBubble.Position = isUser and UDim2.new(0.25, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
+
+        local bubblePadding = Instance.new("UIPadding")
+        bubblePadding.PaddingTop = UDim.new(0, 8)
+        bubblePadding.PaddingBottom = UDim.new(0, 8)
+        bubblePadding.PaddingLeft = UDim.new(0, 12)
+        bubblePadding.PaddingRight = UDim.new(0, 12)
+        bubblePadding.Parent = MsgBubble
+
+        MsgBubble.Parent = MsgContainer
+        Instance.new("UICorner", MsgBubble).CornerRadius = UDim.new(0, 10)
+
+        -- تمرير للأسفل
+        task.wait()
+        MessagesFrame.CanvasPosition = Vector2.new(0, MessagesFrame.AbsoluteCanvasSize.Y)
+    end
+
+    -- رسالة ترحيب
+    addMessage("ai", "Hello " .. LocalPlayer.Name .. "! 👋 I'm your AI support assistant. How can I help you today?", nil)
+
+    -- دالة إرسال
+    local sending = false
+    local function sendMessage()
+        if sending then return end
+        local text = MsgInput.Text:gsub("^%s+", ""):gsub("%s+$", "")
+        if text == "" then return end
+
+        sending = true
+        MsgInput.Text = ""
+        addMessage("player", text, nil)
+
+        sendSupport(text, function(success, data)
+            sending = false
+            if not success then
+                addMessage("ai", "⚠️ Connection error. Please try again.", nil)
+                return
+            end
+
+            -- إظهار ردود فورية إن وجدت
+            if data and data.replies then
+                for _, r in ipairs(data.replies) do
+                    local msgText = r.message or r.text or ""
+                    local sender = r.sender or "ai"
+                    local msgId = r.id or r.created_at or (tostring(sender) .. msgText)
+                    addMessage(sender, msgText, msgId)
+                    if r.created_at then lastSeenTime = r.created_at end
+                end
+            end
+
+            if data and data.reply then
+                addMessage("ai", data.reply, nil)
+            end
+
+            if data and data.response then
+                addMessage("ai", data.response, nil)
+            end
+        end)
+    end
+
+    SendBtn.MouseButton1Click:Connect(sendMessage)
+    MsgInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed then sendMessage() end
     end)
 
-    if not success or not response then
-        status.Text = "❌ Could not reach key server."
-        warn("[KeyForge] Request failed: " .. tostring(response))
+    -- Poll للردود الجديدة
+    task.spawn(function()
+        while ChatFrame.Parent do
+            task.wait(8)
+            fetchReplies(lastSeenTime, function(success, messages)
+                if not success or not messages then return end
+                for _, m in ipairs(messages) do
+                    local msgText = m.message or m.text or ""
+                    local sender = m.sender or "ai"
+                    local msgId = m.id or m.created_at or (tostring(sender) .. msgText)
+                    if m.created_at then lastSeenTime = m.created_at end
+                    addMessage(sender, msgText, msgId)
+                end
+            end)
+        end
+    end)
+end
+
+-- ═══ منطق التحقق ═══
+local verifying = false
+
+VerifyBtn.MouseButton1Click:Connect(function()
+    if verifying then return end
+    local key = KeyInput.Text:gsub("%s+", "")
+    if key == "" then
+        StatusLabel.Text = "⚠️ Please enter a key first"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 180, 60)
         return
     end
 
-    local body = response.Body or response.body or ""
+    verifying = true
+    VerifyBtn.Text = "⏳ Verifying..."
+    VerifyBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    StatusLabel.Text = "Contacting server..."
+    StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
 
-    local decoded, data = pcall(function()
-        return HttpService:JSONDecode(body)
+    task.spawn(function()
+        local valid, message = verifyKey(key)
+        if valid then
+            saveKey(key)
+            StatusLabel.Text = "✅ " .. tostring(message)
+            StatusLabel.TextColor3 = Color3.fromRGB(80, 220, 120)
+            VerifyBtn.Text = "✅ Success!"
+            VerifyBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+
+            task.wait(1)
+            KeyFrame.Visible = false
+
+            print("[KeyForge] " .. tostring(message))
+
+            -- ═══════════════════════════════════════════
+            -- ✅ السكربت المحمي
+            -- ═══════════════════════════════════════════
+            -- loadstring(game:HttpGet("https://your-script-url.lua"))()
+            -- ═══════════════════════════════════════════
+
+            -- فتح شات الدعم
+            openSupportChat()
+
+        else
+            StatusLabel.Text = "❌ " .. tostring(message)
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+            VerifyBtn.Text = "🔓 Verify"
+            VerifyBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+            verifying = false
+        end
     end)
-
-    if not decoded or type(data) ~= "table" then
-        status.Text = "❌ Invalid server response."
-        return
-    end
-
-    if data.valid == true then
-        status.Text = "✅ Key verified! Script unlocked."
-        print("[KeyForge] " .. tostring(data.message or "Access granted"))
-
-        -- ضع كود السكربت المحمي هنا
-        -- مثال:
-        -- loadstring(game:HttpGet("https://example.com/script.lua"))()
-
-        task.wait(1)
-        gui:Destroy()
-    else
-        status.Text = "❌ " .. tostring(data.message or "Invalid key.")
-    end
 end)
