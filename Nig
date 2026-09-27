@@ -1,24 +1,21 @@
 -- ═══════════════════════════════════════════════════════
--- 🔑 KeyForge + AI Support Chat - Delta Version
+-- 🔑 KeyForge Key Check + AI Support Chat - Delta Version
 -- ═══════════════════════════════════════════════════════
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ═══ الإعدادات ═══
-local API_URL      = "https://secure-key-system.lovable.app/api/public/v1/verify"
-local MSG_URL      = "https://secure-key-system.lovable.app/api/public/v1/messages"
-local PROJECT_ID   = "3c3a74de358542e7"
-local API_KEY      = "ks_48c74b0e3da547d88d5e8ae31525d585fc5ef7c41ca5bedc"
-local GET_KEY_URL  = "https://secure-key-system.lovable.app/get/3c3a74de358542e7"
-local SAVE_FILE    = "KeyForge_Key.json"
+local API_URL     = "https://secure-key-system.lovable.app/api/public/v1/verify"
+local MSG_URL     = "https://secure-key-system.lovable.app/api/public/v1/messages"
+local PROJECT_ID  = "3c3a74de358542e7"
+local API_KEY     = "ks_48c74b0e3da547d88d5e8ae31525d585fc5ef7c41ca5bedc"
+local GET_KEY_URL = "https://secure-key-system.lovable.app/get/3c3a74de358542e7"
+local SAVE_FILE   = "KeyForge_Key.json"
 
--- ═══ دوال الطلب ═══
+-- ═══ دالة الطلب - Delta ═══
 local function getRequest()
     if syn and syn.request then return syn.request end
     if http and http.request then return http.request end
@@ -28,11 +25,18 @@ local function getRequest()
 end
 
 local httpRequest = getRequest()
-local HWID = (gethwid and gethwid()) or 
-             (game:GetService("RbxAnalyticsService") and game:GetService("RbxAnalyticsService"):GetClientId()) or 
-             "UNKNOWN_HWID"
 
--- ═══ حفظ المفتاح ═══
+-- ═══ HWID ═══
+local HWID = "UNKNOWN_HWID"
+pcall(function()
+    if gethwid then
+        HWID = gethwid()
+    elseif game:GetService("RbxAnalyticsService") then
+        HWID = game:GetService("RbxAnalyticsService"):GetClientId()
+    end
+end)
+
+-- ═══ حفظ/قراءة المفتاح ═══
 local function saveKey(key)
     if writefile then pcall(writefile, SAVE_FILE, HttpService:JSONEncode({key = key})) end
 end
@@ -47,13 +51,20 @@ end
 
 -- ═══ التحقق من المفتاح ═══
 local function verifyKey(key)
-    if not httpRequest then return false, "Executor missing HTTP" end
+    if not httpRequest then return false, "Executor missing HTTP support" end
     local ok, response = pcall(httpRequest, {
-        Url = API_URL, Method = "POST",
-        Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
+        Url = API_URL,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/json",
+            ["Authorization"] = "Bearer " .. API_KEY,
+        },
         Body = HttpService:JSONEncode({
-            project_id = PROJECT_ID, key = key, hwid = HWID,
-            roblox_user_id = LocalPlayer.UserId, roblox_username = LocalPlayer.Name,
+            project_id = PROJECT_ID,
+            key = key,
+            hwid = HWID,
+            roblox_user_id = LocalPlayer.UserId,
+            roblox_username = LocalPlayer.Name,
             roblox_avatar = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=150&height=150&format=png",
         }),
     })
@@ -63,58 +74,8 @@ local function verifyKey(key)
     return response.valid == true, response.message or "Unknown"
 end
 
--- ═══ إرسال رسالة للدعم ═══
-local function sendSupport(text, callback)
-    if not httpRequest then return end
-    task.spawn(function()
-        local ok, res = pcall(httpRequest, {
-            Url = MSG_URL, Method = "POST",
-            Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
-            Body = HttpService:JSONEncode({
-                project_id = PROJECT_ID,
-                player_user_id = LocalPlayer.UserId,
-                player_name = LocalPlayer.Name,
-                message = text,
-            }),
-        })
-        if not ok or not res then 
-            if callback then callback(false, "Connection failed") end
-            return 
-        end
-        local success, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-        if success and data then
-            if callback then callback(true, data) end
-        else
-            if callback then callback(false, "Invalid response") end
-        end
-    end)
-end
-
--- ═══ جلب الردود ═══
-local function fetchReplies(lastSeen, callback)
-    if not httpRequest then return end
-    task.spawn(function()
-        local url = MSG_URL .. "?project_id=" .. PROJECT_ID .. "&player_user_id=" .. LocalPlayer.UserId
-        if lastSeen then url = url .. "&since=" .. HttpService:UrlEncode(lastSeen) end
-        local ok, res = pcall(httpRequest, {
-            Url = url, Method = "GET",
-            Headers = { ["Authorization"] = "Bearer " .. API_KEY },
-        })
-        if not ok or not res then 
-            if callback then callback(false, nil) end
-            return 
-        end
-        local success, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-        if success and data then
-            if callback then callback(true, data.messages or data.replies or {}) end
-        else
-            if callback then callback(false, nil) end
-        end
-    end)
-end
-
 -- ═══════════════════════════════════════════════════════
--- 🎨 واجهة GUI
+-- 🎨 واجهة إدخال المفتاح
 -- ═══════════════════════════════════════════════════════
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -133,7 +94,6 @@ KeyFrame.BorderSizePixel = 0
 KeyFrame.Active = true
 KeyFrame.Draggable = true
 KeyFrame.Parent = ScreenGui
-
 Instance.new("UICorner", KeyFrame).CornerRadius = UDim.new(0, 12)
 
 local KeyStroke = Instance.new("UIStroke")
@@ -241,258 +201,133 @@ StatusLabel.TextWrapped = true
 StatusLabel.Parent = KeyFrame
 
 -- ═══════════════════════════════════════════════════════
--- 💬 نافذة شات الدعم (تنشأ بعد التحقق)
+-- 🔔 نظام الإشعارات المنبثقة
 -- ═══════════════════════════════════════════════════════
 
-local function openSupportChat()
-    if ScreenGui:FindFirstChild("ChatFrame") then return end
+local NotifyGui = Instance.new("ScreenGui")
+NotifyGui.Name = "SupportNotify"
+NotifyGui.ResetOnSpawn = false
+NotifyGui.Parent = (gethui and gethui()) or CoreGui
 
-    local ChatFrame = Instance.new("Frame")
-    ChatFrame.Name = "ChatFrame"
-    ChatFrame.Size = UDim2.new(0, 500, 0, 550)
-    ChatFrame.Position = UDim2.new(0.5, -250, 0.5, -275)
-    ChatFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    ChatFrame.BorderSizePixel = 0
-    ChatFrame.Active = true
-    ChatFrame.Draggable = true
-    ChatFrame.Parent = ScreenGui
-    Instance.new("UICorner", ChatFrame).CornerRadius = UDim.new(0, 12)
+local NotifyList = Instance.new("Frame")
+NotifyList.Name = "List"
+NotifyList.BackgroundTransparency = 1
+NotifyList.Size = UDim2.new(0, 320, 1, -20)
+NotifyList.Position = UDim2.new(1, -330, 0, 10)
+NotifyList.Parent = NotifyGui
 
-    local ChatStroke = Instance.new("UIStroke")
-    ChatStroke.Color = Color3.fromRGB(88, 101, 242)
-    ChatStroke.Thickness = 2
-    ChatStroke.Parent = ChatFrame
+local NotifyLayout = Instance.new("UIListLayout")
+NotifyLayout.Padding = UDim.new(0, 6)
+NotifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NotifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+NotifyLayout.Parent = NotifyList
 
-    -- العنوان
-    local ChatTitle = Instance.new("TextLabel")
-    ChatTitle.Size = UDim2.new(1, -100, 0, 50)
-    ChatTitle.Position = UDim2.new(0, 15, 0, 0)
-    ChatTitle.BackgroundTransparency = 1
-    ChatTitle.Text = "💬 Support Chat - AI Assistant"
-    ChatTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatTitle.TextSize = 18
-    ChatTitle.Font = Enum.Font.GothamBold
-    ChatTitle.TextXAlignment = Enum.TextXAlignment.Left
-    ChatTitle.Parent = ChatFrame
+local function notify(title, text)
+    local card = Instance.new("TextButton")
+    card.AutoButtonColor = false
+    card.Size = UDim2.new(1, 0, 0, 0)
+    card.AutomaticSize = Enum.AutomaticSize.Y
+    card.BackgroundColor3 = Color3.fromRGB(20, 24, 28)
+    card.TextColor3 = Color3.fromRGB(235, 240, 240)
+    card.TextWrapped = true
+    card.TextXAlignment = Enum.TextXAlignment.Left
+    card.Font = Enum.Font.Gotham
+    card.TextSize = 14
+    card.RichText = true
+    card.Text = "<b>" .. tostring(title) .. "</b>\n" .. tostring(text):gsub("<", "&lt;")
+    card.LayoutOrder = tick()
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
 
-    -- زر الإغلاق
-    local ChatClose = Instance.new("TextButton")
-    ChatClose.Size = UDim2.new(0, 32, 0, 32)
-    ChatClose.Position = UDim2.new(1, -42, 0, 9)
-    ChatClose.BackgroundColor3 = Color3.fromRGB(230, 60, 60)
-    ChatClose.Text = "✕"
-    ChatClose.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ChatClose.TextSize = 16
-    ChatClose.Font = Enum.Font.GothamBold
-    ChatClose.Parent = ChatFrame
-    Instance.new("UICorner", ChatClose).CornerRadius = UDim.new(0, 8)
-    ChatClose.MouseButton1Click:Connect(function() ChatFrame:Destroy() end)
+    local pad = Instance.new("UIPadding", card)
+    pad.PaddingTop = UDim.new(0, 10)
+    pad.PaddingBottom = UDim.new(0, 10)
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
 
-    -- مؤشر الحالة
-    local StatusDot = Instance.new("Frame")
-    StatusDot.Size = UDim2.new(0, 10, 0, 10)
-    StatusDot.Position = UDim2.new(1, -60, 0, 55)
-    StatusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 120)
-    StatusDot.BorderSizePixel = 0
-    StatusDot.Parent = ChatFrame
-    Instance.new("UICorner", StatusDot).CornerRadius = UDim.new(1, 0)
+    local stroke = Instance.new("UIStroke", card)
+    stroke.Color = Color3.fromRGB(0, 220, 150)
+    stroke.Thickness = 1.5
 
-    local StatusText = Instance.new("TextLabel")
-    StatusText.Size = UDim2.new(0, 80, 0, 15)
-    StatusText.Position = UDim2.new(1, -80, 0, 65)
-    StatusText.BackgroundTransparency = 1
-    StatusText.Text = "Online"
-    StatusText.TextColor3 = Color3.fromRGB(80, 220, 120)
-    StatusText.TextSize = 11
-    StatusText.Font = Enum.Font.Gotham
-    StatusText.Parent = ChatFrame
-
-    -- منطقة الرسائل (ScrollingFrame)
-    local MessagesFrame = Instance.new("ScrollingFrame")
-    MessagesFrame.Size = UDim2.new(1, -30, 1, -170)
-    MessagesFrame.Position = UDim2.new(0, 15, 0, 85)
-    MessagesFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
-    MessagesFrame.BorderSizePixel = 0
-    MessagesFrame.ScrollBarThickness = 6
-    MessagesFrame.ScrollBarImageColor3 = Color3.fromRGB(88, 101, 242)
-    MessagesFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    MessagesFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    MessagesFrame.Parent = ChatFrame
-    Instance.new("UICorner", MessagesFrame).CornerRadius = UDim.new(0, 10)
-
-    local MessageLayout = Instance.new("UIListLayout")
-    MessageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    MessageLayout.Padding = UDim.new(0, 8)
-    MessageLayout.Parent = MessagesFrame
-
-    local MessagePadding = Instance.new("UIPadding")
-    MessagePadding.PaddingTop = UDim.new(0, 10)
-    MessagePadding.PaddingBottom = UDim.new(0, 10)
-    MessagePadding.PaddingLeft = UDim.new(0, 10)
-    MessagePadding.PaddingRight = UDim.new(0, 10)
-    MessagePadding.Parent = MessagesFrame
-
-    -- حقل الإدخال
-    local InputBox = Instance.new("Frame")
-    InputBox.Size = UDim2.new(1, -30, 0, 50)
-    InputBox.Position = UDim2.new(0, 15, 1, -65)
-    InputBox.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
-    InputBox.BorderSizePixel = 0
-    InputBox.Parent = ChatFrame
-    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 10)
-
-    local InputBoxStroke = Instance.new("UIStroke")
-    InputBoxStroke.Color = Color3.fromRGB(60, 60, 80)
-    InputBoxStroke.Thickness = 1
-    InputBoxStroke.Parent = InputBox
-
-    local MsgInput = Instance.new("TextBox")
-    MsgInput.Size = UDim2.new(1, -80, 1, 0)
-    MsgInput.Position = UDim2.new(0, 12, 0, 0)
-    MsgInput.BackgroundTransparency = 1
-    MsgInput.PlaceholderText = "Type your message..."
-    MsgInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 120)
-    MsgInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MsgInput.TextSize = 14
-    MsgInput.Font = Enum.Font.Gotham
-    MsgInput.TextXAlignment = Enum.TextXAlignment.Left
-    MsgInput.ClearTextOnFocus = false
-    MsgInput.Parent = InputBox
-
-    local SendBtn = Instance.new("TextButton")
-    SendBtn.Size = UDim2.new(0, 60, 1, -10)
-    SendBtn.Position = UDim2.new(1, -65, 0, 5)
-    SendBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    SendBtn.Text = "➤"
-    SendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SendBtn.TextSize = 20
-    SendBtn.Font = Enum.Font.GothamBold
-    SendBtn.Parent = InputBox
-    Instance.new("UICorner", SendBtn).CornerRadius = UDim.new(0, 8)
-
-    -- دالة إضافة رسالة للشات
-    local messageOrder = 0
-    local lastSeenTime = nil
-    local shownMessages = {}
-
-    local function addMessage(sender, text, msgId)
-        if msgId and shownMessages[msgId] then return end
-        if msgId then shownMessages[msgId] = true end
-
-        messageOrder = messageOrder + 1
-
-        local isUser = (sender == "player" or sender == "user")
-        local isAI = (sender == "ai" or sender == "bot")
-        local isOwner = (sender == "owner")
-
-        local MsgContainer = Instance.new("Frame")
-        MsgContainer.Size = UDim2.new(1, 0, 0, 0)
-        MsgContainer.AutomaticSize = Enum.AutomaticSize.Y
-        MsgContainer.BackgroundTransparency = 1
-        MsgContainer.LayoutOrder = messageOrder
-        MsgContainer.Parent = MessagesFrame
-
-        local MsgBubble = Instance.new("TextLabel")
-        MsgBubble.BackgroundColor3 = isUser and Color3.fromRGB(88, 101, 242) 
-                                    or (isAI and Color3.fromRGB(45, 45, 60) 
-                                    or (isOwner and Color3.fromRGB(200, 100, 40) 
-                                    or Color3.fromRGB(45, 45, 60)))
-        MsgBubble.TextColor3 = Color3.fromRGB(255, 255, 255)
-        MsgBubble.TextSize = 13
-        MsgBubble.Font = Enum.Font.Gotham
-        MsgBubble.TextWrapped = true
-        MsgBubble.TextXAlignment = Enum.TextXAlignment.Left
-        MsgBubble.TextYAlignment = Enum.TextYAlignment.Top
-
-        local prefix = isUser and "👤 You: " or (isAI and "🤖 AI: " or (isOwner and "👑 Owner: " or "💬: "))
-        MsgBubble.Text = prefix .. text
-
-        -- حساب العرض تلقائياً
-        MsgBubble.Size = UDim2.new(0.75, 0, 0, 0)
-        MsgBubble.AutomaticSize = Enum.AutomaticSize.XY
-        MsgBubble.Position = isUser and UDim2.new(0.25, 0, 0, 0) or UDim2.new(0, 0, 0, 0)
-
-        local bubblePadding = Instance.new("UIPadding")
-        bubblePadding.PaddingTop = UDim.new(0, 8)
-        bubblePadding.PaddingBottom = UDim.new(0, 8)
-        bubblePadding.PaddingLeft = UDim.new(0, 12)
-        bubblePadding.PaddingRight = UDim.new(0, 12)
-        bubblePadding.Parent = MsgBubble
-
-        MsgBubble.Parent = MsgContainer
-        Instance.new("UICorner", MsgBubble).CornerRadius = UDim.new(0, 10)
-
-        -- تمرير للأسفل
-        task.wait()
-        MessagesFrame.CanvasPosition = Vector2.new(0, MessagesFrame.AbsoluteCanvasSize.Y)
-    end
-
-    -- رسالة ترحيب
-    addMessage("ai", "Hello " .. LocalPlayer.Name .. "! 👋 I'm your AI support assistant. How can I help you today?", nil)
-
-    -- دالة إرسال
-    local sending = false
-    local function sendMessage()
-        if sending then return end
-        local text = MsgInput.Text:gsub("^%s+", ""):gsub("%s+$", "")
-        if text == "" then return end
-
-        sending = true
-        MsgInput.Text = ""
-        addMessage("player", text, nil)
-
-        sendSupport(text, function(success, data)
-            sending = false
-            if not success then
-                addMessage("ai", "⚠️ Connection error. Please try again.", nil)
-                return
-            end
-
-            -- إظهار ردود فورية إن وجدت
-            if data and data.replies then
-                for _, r in ipairs(data.replies) do
-                    local msgText = r.message or r.text or ""
-                    local sender = r.sender or "ai"
-                    local msgId = r.id or r.created_at or (tostring(sender) .. msgText)
-                    addMessage(sender, msgText, msgId)
-                    if r.created_at then lastSeenTime = r.created_at end
-                end
-            end
-
-            if data and data.reply then
-                addMessage("ai", data.reply, nil)
-            end
-
-            if data and data.response then
-                addMessage("ai", data.response, nil)
-            end
-        end)
-    end
-
-    SendBtn.MouseButton1Click:Connect(sendMessage)
-    MsgInput.FocusLost:Connect(function(enterPressed)
-        if enterPressed then sendMessage() end
-    end)
-
-    -- Poll للردود الجديدة
-    task.spawn(function()
-        while ChatFrame.Parent do
-            task.wait(8)
-            fetchReplies(lastSeenTime, function(success, messages)
-                if not success or not messages then return end
-                for _, m in ipairs(messages) do
-                    local msgText = m.message or m.text or ""
-                    local sender = m.sender or "ai"
-                    local msgId = m.id or m.created_at or (tostring(sender) .. msgText)
-                    if m.created_at then lastSeenTime = m.created_at end
-                    addMessage(sender, msgText, msgId)
-                end
-            end)
-        end
+    card.Parent = NotifyList
+    card.MouseButton1Click:Connect(function() card:Destroy() end)
+    task.delay(15, function() 
+        if card and card.Parent then 
+            local tween = TweenService and TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1, TextTransparency = 1})
+            if tween then tween:Play(); tween.Completed:Wait() end
+            card:Destroy() 
+        end 
     end)
 end
 
--- ═══ منطق التحقق ═══
+-- ═══════════════════════════════════════════════════════
+-- 💬 نظام الدعم - Support Messages
+-- ═══════════════════════════════════════════════════════
+
+local lastSeen = nil
+local primed = false
+
+local function decode(res)
+    if not res then return nil, "no response" end
+    local okJ, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+    if not okJ then return nil, "bad JSON (HTTP " .. tostring(res.StatusCode) .. "): " .. tostring(res.Body) end
+    if res.StatusCode and res.StatusCode >= 400 then
+        return nil, "HTTP " .. res.StatusCode .. ": " .. tostring(data.message)
+    end
+    return data
+end
+
+local function label(sender)
+    if sender == "owner" then return "👑 Owner" 
+    elseif sender == "ai" then return "🤖 AI Support" 
+    elseif sender == "player" or sender == "user" then return "👤 You"
+    end
+    return "💬 Support"
+end
+
+local function sendSupport(text)
+    if not httpRequest then warn("[Support] No HTTP function") return end
+    local ok, res = pcall(httpRequest, {
+        Url = MSG_URL, Method = "POST",
+        Headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. API_KEY },
+        Body = HttpService:JSONEncode({
+            project_id = PROJECT_ID,
+            player_user_id = LocalPlayer.UserId,
+            player_name = LocalPlayer.Name,
+            message = text,
+        }),
+    })
+    if not ok then warn("[Support] request failed: " .. tostring(res)) return end
+    local data, err = decode(res)
+    if not data then warn("[Support] " .. err) notify("⚠️ Support Error", err) return end
+    return data
+end
+
+local function pollReplies()
+    if not httpRequest then return end
+    local url = MSG_URL .. "?project_id=" .. PROJECT_ID .. "&player_user_id=" .. LocalPlayer.UserId
+    if lastSeen then url = url .. "&since=" .. HttpService:UrlEncode(lastSeen) end
+    local ok, res = pcall(httpRequest, { 
+        Url = url, Method = "GET", 
+        Headers = { ["Authorization"] = "Bearer " .. API_KEY } 
+    })
+    if not ok then warn("[Support] poll failed: " .. tostring(res)) return end
+    local data, err = decode(res)
+    if not data then warn("[Support] " .. err) return end
+    for _, m in ipairs(data.messages or {}) do
+        lastSeen = m.created_at
+        local who = label(m.sender)
+        if who and primed then
+            print("[" .. who .. "] " .. tostring(m.message))
+            notify(who, tostring(m.message))
+        end
+    end
+    primed = true
+end
+
+-- ═══════════════════════════════════════════════════════
+-- ⚡ منطق التحقق
+-- ═══════════════════════════════════════════════════════
+
 local verifying = false
 
 VerifyBtn.MouseButton1Click:Connect(function()
@@ -523,15 +358,21 @@ VerifyBtn.MouseButton1Click:Connect(function()
             KeyFrame.Visible = false
 
             print("[KeyForge] " .. tostring(message))
+            notify("✅ Key Accepted", tostring(message))
 
             -- ═══════════════════════════════════════════
-            -- ✅ السكربت المحمي
+            -- ✅ ضع السكربت المحمي هنا
             -- ═══════════════════════════════════════════
             -- loadstring(game:HttpGet("https://your-script-url.lua"))()
             -- ═══════════════════════════════════════════
 
-            -- فتح شات الدعم
-            openSupportChat()
+            -- بدء polling للرسائل
+            pollReplies()
+            task.spawn(function() 
+                while task.wait(5) do 
+                    pcall(pollReplies) 
+                end 
+            end)
 
         else
             StatusLabel.Text = "❌ " .. tostring(message)
@@ -542,3 +383,10 @@ VerifyBtn.MouseButton1Click:Connect(function()
         end
     end)
 end)
+
+-- ═══ دالة عامة لإرسال رسالة (تستخدم من أي مكان) ═══
+getgenv().KeyForgeSupport = {
+    send = function(text) return sendSupport(text) end,
+    notify = function(title, text) notify(title, text) end,
+    verify = function(key) return verifyKey(key) end,
+}
